@@ -1,0 +1,14 @@
+services:
+  database:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: supermercado
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: desarrollo
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
