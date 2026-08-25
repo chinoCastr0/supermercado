@@ -1,14 +1,23 @@
 <!doctype html>
+<!--
+  IMPORTANCIA: documento anfitrión donde Vite monta la aplicación React.
+  PATRÓN: Application Shell; entrega la estructura HTML mínima y delega la UI.
+  SOLUCIÓN ESPECÍFICA: metadatos, favicon, título y elemento `root` del inventario.
+-->
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Panel de inventario y administración de productos del supermercado" />
+    <meta
+      name="description"
+      content="Panel de inventario y administración de productos del supermercado"
+    />
     <meta name="theme-color" content="#201d25" />
     <title>Inventario | Supermercado</title>
   </head>
   <body>
+    <!-- React controla el contenido de este nodo desde src/main.tsx. -->
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

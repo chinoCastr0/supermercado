@@ -1,3 +1,5 @@
+# IMPORTANCIA: fija dependencias reproducibles del backend.
+# Estas versiones son infraestructura concreta, no patrones ni principios SOLID.
 alembic==1.18.5
 annotated-doc==0.0.4
 annotated-types==0.8.0

@@ -28,10 +28,23 @@ def test_parse_excel_rows_from_simple_dataframe(tmp_path: Path) -> None:
 def test_parse_excel_rows_accepts_fecha_alias(tmp_path: Path) -> None:
     path = tmp_path / "products.xlsx"
     dataframe = pd.DataFrame(
-        [{"barcode": "111", "name": "Leche", "price": 12.5, "fecha": "14/08/2026 18:30"}]
+        [
+            {
+                "barcode": "111",
+                "name": "Leche",
+                "price": 12.5,
+                "fecha": "14/08/2026 18:30",
+            }
+        ]
     )
     dataframe.to_excel(path, index=False, engine="openpyxl")
 
     rows = parse_excel_rows(path.read_bytes(), path.name)
 
     assert rows[0]["last_updated"].isoformat() == "2026-08-14T18:30:00+00:00"
+"""Pruebas del adaptador de importación.
+
+IMPORTANCIA: documentan y protegen el contrato observable del parser.
+PATRÓN: cada prueba sigue Arrange–Act–Assert. Esto es una estructura de tests,
+no una solución del dominio; los ejemplos y el alias `fecha` sí son específicos.
+"""

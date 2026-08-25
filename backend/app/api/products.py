@@ -1,4 +1,11 @@
-#
+"""Controladores HTTP de productos.
+
+IMPORTANCIA: traduce requests HTTP en operaciones sobre el inventario.
+PATRÓN / SOLID: es la capa Controller de una arquitectura por capas;
+`Depends(get_db)` aplica Dependency Injection y el parser separado aplica SRP.
+SOLUCIÓN ESPECÍFICA: rutas, códigos HTTP y política de actualización al importar.
+Los bloques CRUD son implementación del supermercado, no patrones por sí mismos.
+"""
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy import select
@@ -47,6 +54,8 @@ def create_product(
     db.refresh(product)
 
     return product
+
+
 @router.get(
     "",
     response_model=list[ProductResponse],
@@ -56,12 +65,7 @@ def list_products(
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=500),
 ) -> list[Product]:
-    statement = (
-        select(Product)
-        .order_by(Product.name)
-        .offset(skip)
-        .limit(limit)
-    )
+    statement = select(Product).order_by(Product.name).offset(skip).limit(limit)
 
     products = db.scalars(statement).all()
 
@@ -166,7 +170,6 @@ def import_products(
             detail=str(exc),
         ) from exc
 
-
     imported_count = 0
     skipped_barcodes: list[str] = []
 
@@ -176,7 +179,9 @@ def import_products(
             skipped_barcodes.append(row["name"])
             continue
 
-        existing_product = db.scalar(select(Product).where(Product.barcode == barcode))
+        existing_product = db.scalar(
+            select(Product).where(Product.barcode == barcode)
+        )
 
         if existing_product is None:
             product = Product(**row)

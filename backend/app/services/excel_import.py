@@ -1,3 +1,12 @@
+"""Adaptador que transforma archivos tabulares en datos del dominio.
+
+IMPORTANCIA: aísla pandas, Excel/CSV y sus formatos irregulares del controlador.
+PATRÓN / SOLID: es un Adapter de entrada y aplica SRP. Las funciones de coerción
+son pequeñas y puras, por lo que pueden probarse o reemplazarse aisladamente.
+SOLUCIÓN ESPECÍFICA: alias de columnas, fechas `dayfirst` y filas inválidas.
+La rama CSV/Excel es un condicional simple, no una implementación de Strategy.
+"""
+
 from __future__ import annotations
 
 import io
@@ -63,12 +72,17 @@ def _coerce_datetime(value: Any) -> datetime | None:
     except (TypeError, ValueError):
         return None
 
-    parsed = timestamp.to_pydatetime() if hasattr(timestamp, "to_pydatetime") else timestamp
+    parsed = (
+        timestamp.to_pydatetime()
+        if hasattr(timestamp, "to_pydatetime")
+        else timestamp
+    )
     if not isinstance(parsed, datetime):
         return None
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
+
 
 def parse_excel_rows(file_bytes: bytes, filename: str) -> list[dict[str, Any]]:
     if not file_bytes:
@@ -98,9 +112,7 @@ def parse_excel_rows(file_bytes: bytes, filename: str) -> list[dict[str, Any]]:
         ("lastupdated", "fecha", "ultimaactualizacion"),
     )
     if not name_column or not price_column:
-        raise ValueError(
-            "El archivo debe incluir columnas de nombre y precio."
-        )
+        raise ValueError("El archivo debe incluir columnas de nombre y precio.")
 
     rows: list[dict[str, Any]] = []
 
@@ -122,7 +134,7 @@ def parse_excel_rows(file_bytes: bytes, filename: str) -> list[dict[str, Any]]:
             if last_updated_column
             else datetime.now(timezone.utc)
         )
-        
+
         rows.append(
             {
                 "barcode": barcode or "",

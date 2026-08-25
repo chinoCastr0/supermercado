@@ -1,4 +1,8 @@
 {
+  /*
+   * IMPORTANCIA: coordina las configuraciones TypeScript del navegador y Node.
+   * PATRÓN: configuración compuesta por referencias; no es lógica de dominio.
+   */
   "files": [],
   "references": [
     { "path": "./tsconfig.app.json" },
