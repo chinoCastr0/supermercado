@@ -9,6 +9,7 @@ import type { Product } from "../types/product";
 
 export function StatsCards({ products }: { products: Product[] }) {
   const active = products.filter((product) => product.active).length;
+  const pending = products.filter((product) => !product.printed).length;
   return (
     <div className="stats-grid">
       <article className="stat-card">
@@ -17,6 +18,14 @@ export function StatsCards({ products }: { products: Product[] }) {
           <span>Total de productos</span>
           <strong>{products.length.toLocaleString("es-AR")}</strong>
           <small>registros en la base</small>
+        </div>
+      </article>
+      <article className="stat-card">
+        <div className="stat-icon amber">!</div>
+        <div>
+          <span>Carteles pendientes</span>
+          <strong>{pending.toLocaleString("es-AR")}</strong>
+          <small>requieren impresión</small>
         </div>
       </article>
       <article className="stat-card">

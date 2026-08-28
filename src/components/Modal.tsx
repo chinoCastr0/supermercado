@@ -15,9 +15,10 @@ type Props = {
   isBusy: boolean;
   onClose: () => void;
   children: ReactNode;
+  className?: string;
 };
 
-export function Modal({ titleId, isBusy, onClose, children }: Props) {
+export function Modal({ titleId, isBusy, onClose, children, className }: Props) {
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !isBusy) onClose();
@@ -34,7 +35,7 @@ export function Modal({ titleId, isBusy, onClose, children }: Props) {
       }}
     >
       <section
-        className="modal"
+        className={`modal ${className ?? ""}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

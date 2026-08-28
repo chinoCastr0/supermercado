@@ -8,11 +8,58 @@ SOLUCIÓN ESPECÍFICA: límites de caracteres, precio positivo y campos editable
 
 from datetime import datetime
 from decimal import Decimal
+from typing import Annotated, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
 
-class ProductBase(BaseModel):
+REGISTER_NAME_BYTES = 18
+REGISTER_BARCODE_BYTES = 15
+
+
+def _register_text(value: str, field: str, maximum_bytes: int) -> str:
+    if not value.strip():
+        raise ValueError(f"{field} es obligatorio")
+    if any(character in value for character in ("\x00", "\r", "\n", "\t")):
+        raise ValueError(f"{field} contiene caracteres de control")
+    try:
+        encoded = value.encode("cp1252")
+    except UnicodeEncodeError as exc:
+        raise ValueError(
+            f"{field} contiene caracteres incompatibles con la caja"
+        ) from exc
+    if len(encoded) > maximum_bytes:
+        raise ValueError(f"{field} admite hasta {maximum_bytes} bytes")
+    return value
+
+
+def _register_barcode(value: str) -> str:
+    return _register_text(value, "El código de barras", REGISTER_BARCODE_BYTES)
+
+
+def _register_name(value: str) -> str:
+    return _register_text(value, "El nombre", REGISTER_NAME_BYTES)
+
+
+RegisterBarcode = Annotated[str, AfterValidator(_register_barcode)]
+RegisterName = Annotated[str, AfterValidator(_register_name)]
+WeightUnit = Literal["g", "kg", "ml", "l", "u"]
+
+
+class WeightFields(BaseModel):
+    """Cantidad para etiquetas; deliberadamente ajena al archivo PRESUR1."""
+
+    weight: Decimal | None = Field(default=None, gt=0)
+    weight_unit: WeightUnit | None = None
+
+    @model_validator(mode="after")
+    def validate_complete_weight(self) -> Self:
+        if (self.weight is None) != (self.weight_unit is None):
+            raise ValueError("El peso y su unidad deben informarse juntos")
+        return self
+
+
+class ProductBase(WeightFields):
     """Campos compartidos por creación y respuesta."""
 
     barcode: str = Field(min_length=1, max_length=50)
@@ -24,22 +71,15 @@ class ProductBase(BaseModel):
 class ProductCreate(ProductBase):
     """Datos obligatorios para crear un producto."""
 
-    pass
+    barcode: RegisterBarcode
+    name: RegisterName
 
 
-class ProductUpdate(BaseModel):
+class ProductUpdate(WeightFields):
     """Campos opcionales para permitir actualizaciones parciales."""
 
-    barcode: str | None = Field(
-        default=None,
-        min_length=1,
-        max_length=50,
-    )
-    name: str | None = Field(
-        default=None,
-        min_length=1,
-        max_length=255,
-    )
+    barcode: RegisterBarcode | None = None
+    name: RegisterName | None = None
     price: Decimal | None = Field(
         default=None,
         gt=0,
@@ -52,5 +92,32 @@ class ProductResponse(ProductBase):
 
     id: int
     last_updated: datetime
+    label_version: int
+    printed: bool
+    printed_at: datetime | None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ProductPrintStatusUpdate(BaseModel):
+    """Cambio explícito de estado para uno o varios carteles vigentes."""
+
+    product_ids: list[int] = Field(min_length=1, max_length=20_000)
+    printed: bool
+
+
+class LabelGenerationRequest(BaseModel):
+    """Productos solicitados para una generación de carteles."""
+
+    product_ids: list[int] = Field(min_length=1, max_length=20_000)
+
+
+class PrintStatusResponse(BaseModel):
+    updated_count: int
+
+
+class BatchConfirmationResponse(BaseModel):
+    batch_id: str
+    marked_count: int
+    stale_product_ids: list[int]
+    missing_product_ids: list[int]

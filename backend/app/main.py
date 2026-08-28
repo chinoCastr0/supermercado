@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.products import router as products_router
+from app.api.labels import router as labels_router
 from app.database import initialize_database
 
 
@@ -29,9 +30,17 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=[
+        "Content-Disposition",
+        "X-Print-Batch-Id",
+        "X-Print-Product-Count",
+        "X-Print-Skipped-Ids",
+        "X-Print-Warnings",
+    ],
 )
 
 app.include_router(products_router)
+app.include_router(labels_router)
 
 
 @app.get("/")

@@ -4,23 +4,31 @@
  * PATRÓN / SOLID: Controlled Component. Aplica SRP e ISP porque sólo recibe los
  * valores y callbacks necesarios. El catálogo de filtros es solución específica.
  */
-import type { ProductSort, StatusFilter } from "../types/product";
+import type {
+  PrintFilter,
+  ProductSort,
+  StatusFilter,
+} from "../types/product";
 
 type Props = {
   query: string;
   status: StatusFilter;
+  printStatus: PrintFilter;
   sort: ProductSort;
   onQueryChange: (value: string) => void;
   onStatusChange: (value: StatusFilter) => void;
+  onPrintStatusChange: (value: PrintFilter) => void;
   onSortChange: (value: ProductSort) => void;
 };
 
 export function ProductFilters({
   query,
   status,
+  printStatus,
   sort,
   onQueryChange,
   onStatusChange,
+  onPrintStatusChange,
   onSortChange,
 }: Props) {
   return (
@@ -42,6 +50,17 @@ export function ProductFilters({
         <option value="all">Todos los estados</option>
         <option value="active">Activos</option>
         <option value="inactive">Inactivos</option>
+      </select>
+      <select
+        value={printStatus}
+        onChange={(event) =>
+          onPrintStatusChange(event.target.value as PrintFilter)
+        }
+        aria-label="Filtrar por impresión"
+      >
+        <option value="all">Todos los carteles</option>
+        <option value="pending">Pendientes</option>
+        <option value="printed">Impresos</option>
       </select>
       <select
         value={sort}

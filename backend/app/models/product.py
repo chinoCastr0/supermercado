@@ -10,7 +10,7 @@ son reglas concretas del inventario, no patrones de diseño.
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import Boolean, DateTime, Numeric, String
+from sqlalchemy import Boolean, DateTime, Integer, Numeric, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -41,10 +41,38 @@ class Product(Base):
         nullable=False,
     )
 
+    # Dato exclusivo del sistema/etiquetas. El exportador PRESUR1 no lo consume.
+    weight: Mapped[Decimal | None] = mapped_column(
+        Numeric(10, 2),
+        nullable=True,
+    )
+
+    weight_unit: Mapped[str | None] = mapped_column(
+        String(2),
+        nullable=True,
+    )
+
     active: Mapped[bool] = mapped_column(
         Boolean,
         default=True,
         nullable=False,
+    )
+
+    label_version: Mapped[int] = mapped_column(
+        Integer,
+        default=1,
+        server_default=text("1"),
+        nullable=False,
+    )
+
+    printed_label_version: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    printed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
     )
 
     # SOLUCIÓN ESPECÍFICA: el servidor controla esta marca temporal para que API,
@@ -55,3 +83,11 @@ class Product(Base):
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
+
+    @property
+    def printed(self) -> bool:
+        """Indica si la versión visible vigente ya fue confirmada como impresa."""
+        return (
+            self.printed_at is not None
+            and self.printed_label_version == self.label_version
+        )

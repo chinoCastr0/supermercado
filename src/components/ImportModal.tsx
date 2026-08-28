@@ -36,8 +36,12 @@ export function ImportModal({ isSaving, onClose, onImport }: Props) {
       <p className="modal-description">
         Subí un Excel o CSV con las columnas <strong>barcode</strong>,{" "}
         <strong>name</strong>, <strong>price</strong> y, opcionalmente,{" "}
-        <strong>last_updated</strong> o <strong>fecha</strong>. Los productos
-        existentes se actualizarán.
+        <strong>peso</strong> (por ejemplo, <code>500 g</code>,{" "}
+        <code>1,5 l</code> o <code>6 unidades</code>) y{" "}
+        <strong>last_updated</strong> o{" "}
+        <strong>fecha</strong>. También podés separar el valor en las columnas{" "}
+        <strong>peso</strong> y <strong>unidad</strong>. Los productos existentes
+        se actualizarán.
       </p>
       <button
         className={`dropzone ${file ? "has-file" : ""}`}

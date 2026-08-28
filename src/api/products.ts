@@ -7,16 +7,31 @@
  *
  * SOLUCIÓN ESPECÍFICA: rutas `/products`, paginación de 500 registros y FormData.
  */
-import type { Product, ProductPayload } from "../types/product";
+import type {
+  BatchConfirmation,
+  GeneratedLabels,
+  LabelWarning,
+  Product,
+  ProductPayload,
+} from "../types/product";
 
 const API_URL = (
-  import.meta.env.VITE_API_URL ?? "http://localhost:8000"
+  import.meta.env.VITE_API_URL ?? "/api"
 ).replace(/\/$/, "");
 
 async function readError(response: Response): Promise<string> {
   try {
-    const data = (await response.json()) as { detail?: string };
-    return data.detail ?? "No se pudo completar la operación.";
+    const data = (await response.json()) as {
+      detail?: string | Array<{ msg?: string }>;
+    };
+    if (typeof data.detail === "string") return data.detail;
+    if (Array.isArray(data.detail)) {
+      const messages = data.detail
+        .map((error) => error.msg)
+        .filter((message): message is string => Boolean(message));
+      if (messages.length) return messages.join(" ");
+    }
+    return "No se pudo completar la operación.";
   } catch {
     return "No se pudo completar la operación.";
   }
@@ -57,9 +72,68 @@ export const productsApi = {
 
   import(
     file: File,
-  ): Promise<{ imported_count: number; skipped_barcodes: string[] }> {
+  ): Promise<{
+    imported_count: number;
+    updated_count: number;
+    skipped_barcodes: string[];
+  }> {
     const body = new FormData();
     body.append("file", file);
     return request("/products/import", { method: "POST", body });
+  },
+
+  async exportRegister(): Promise<void> {
+    const response = await fetch(`${API_URL}/products/export/register`);
+    if (!response.ok) throw new Error(await readError(response));
+
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "PRESUR1.DAT";
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+  },
+
+  async generateLabels(productIds: number[]): Promise<GeneratedLabels> {
+    const response = await fetch(`${API_URL}/labels/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ product_ids: productIds }),
+    });
+    if (!response.ok) throw new Error(await readError(response));
+
+    const disposition = response.headers.get("Content-Disposition") ?? "";
+    const filename =
+      disposition.match(/filename="([^"]+)"/)?.[1] ?? "carteles-precios.pdf";
+    const warningsHeader = response.headers.get("X-Print-Warnings");
+    let warnings: LabelWarning[] = [];
+    if (warningsHeader) {
+      try {
+        warnings = JSON.parse(warningsHeader) as LabelWarning[];
+      } catch {
+        warnings = [];
+      }
+    }
+    return {
+      blob: await response.blob(),
+      batchId: response.headers.get("X-Print-Batch-Id") ?? "",
+      productCount: Number(response.headers.get("X-Print-Product-Count") ?? 0),
+      filename,
+      warnings,
+    };
+  },
+
+  confirmLabelBatch(batchId: string): Promise<BatchConfirmation> {
+    return request(`/labels/batches/${batchId}/confirm`, { method: "POST" });
+  },
+
+  setPrintStatus(productIds: number[], printed: boolean) {
+    return request<{ updated_count: number }>("/labels/status", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ product_ids: productIds, printed }),
+    });
   },
 };

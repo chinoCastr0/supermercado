@@ -46,21 +46,52 @@ def initialize_database() -> None:
     if "products" not in inspect(engine).get_table_names():
         return
     columns = {column["name"] for column in inspect(engine).get_columns("products")}
-    if "last_updated" in columns:
-        return
-
-    column_type = (
-        "TIMESTAMP WITH TIME ZONE"
-        if engine.dialect.name == "postgresql"
-        else "DATETIME"
-    )
     with engine.begin() as connection:
-        connection.execute(
-            text(
-                "ALTER TABLE products ADD COLUMN last_updated "
-                f"{column_type} NOT NULL DEFAULT CURRENT_TIMESTAMP"
+        if "last_updated" not in columns:
+            column_type = (
+                "TIMESTAMP WITH TIME ZONE"
+                if engine.dialect.name == "postgresql"
+                else "DATETIME"
             )
-        )
+            connection.execute(
+                text(
+                    "ALTER TABLE products ADD COLUMN last_updated "
+                    f"{column_type} NOT NULL DEFAULT CURRENT_TIMESTAMP"
+                )
+            )
+        if "weight" not in columns:
+            connection.execute(
+                text("ALTER TABLE products ADD COLUMN weight NUMERIC(10, 2)")
+            )
+        if "weight_unit" not in columns:
+            connection.execute(
+                text("ALTER TABLE products ADD COLUMN weight_unit VARCHAR(2)")
+            )
+        if "label_version" not in columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE products ADD COLUMN label_version "
+                    "INTEGER NOT NULL DEFAULT 1"
+                )
+            )
+        if "printed_label_version" not in columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE products ADD COLUMN printed_label_version INTEGER"
+                )
+            )
+        if "printed_at" not in columns:
+            timestamp_type = (
+                "TIMESTAMP WITH TIME ZONE"
+                if engine.dialect.name == "postgresql"
+                else "DATETIME"
+            )
+            connection.execute(
+                text(
+                    "ALTER TABLE products ADD COLUMN printed_at "
+                    f"{timestamp_type}"
+                )
+            )
 
 
 def get_db() -> Generator[Session, None, None]:

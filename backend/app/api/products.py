@@ -7,8 +7,8 @@ SOLUCIÓN ESPECÍFICA: rutas, códigos HTTP y política de actualización al imp
 Los bloques CRUD son implementación del supermercado, no patrones por sí mismos.
 """
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
+from sqlalchemy import and_, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -20,12 +20,15 @@ from app.schemas.product import (
     ProductUpdate,
 )
 from app.services.excel_import import parse_excel_rows
+from app.services.label_state import mark_label_pending, visible_label_changed
+from app.services.register_export import RegisterExportError, build_presur_file
 
 
 router = APIRouter(
     prefix="/products",
     tags=["Products"],
 )
+IMPORT_QUERY_BATCH_SIZE = 500
 
 
 @router.post(
@@ -64,12 +67,60 @@ def list_products(
     db: Session = Depends(get_db),
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=500),
+    print_status: str = Query(default="all", pattern="^(all|pending|printed)$"),
 ) -> list[Product]:
-    statement = select(Product).order_by(Product.name).offset(skip).limit(limit)
+    statement = select(Product)
+    if print_status == "printed":
+        statement = statement.where(
+            and_(
+                Product.printed_at.is_not(None),
+                Product.printed_label_version == Product.label_version,
+            )
+        )
+    elif print_status == "pending":
+        statement = statement.where(
+            or_(
+                Product.printed_at.is_(None),
+                Product.printed_label_version.is_(None),
+                Product.printed_label_version != Product.label_version,
+            )
+        )
+    statement = statement.order_by(Product.name).offset(skip).limit(limit)
 
     products = db.scalars(statement).all()
 
     return list(products)
+
+
+@router.get(
+    "/export/register",
+    response_class=Response,
+    responses={
+        status.HTTP_200_OK: {
+            "content": {"application/octet-stream": {}},
+            "description": "Archivo PRESUR1.DAT listo para la caja registradora",
+        }
+    },
+)
+def export_register_products(db: Session = Depends(get_db)) -> Response:
+    """Descarga todos los productos activos en el formato binario de la caja."""
+    products = db.scalars(
+        select(Product).where(Product.active.is_(True)).order_by(Product.id)
+    ).all()
+
+    try:
+        content = build_presur_file(products)
+    except RegisterExportError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+
+    return Response(
+        content=content,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": 'attachment; filename="PRESUR1.DAT"'},
+    )
 
 
 @router.get(
@@ -109,6 +160,9 @@ def update_product(
         )
 
     update_data = product_data.model_dump(exclude_unset=True)
+
+    if visible_label_changed(product, update_data):
+        mark_label_pending(product)
 
     for field, value in update_data.items():
         setattr(product, field, value)
@@ -170,26 +224,44 @@ def import_products(
             detail=str(exc),
         ) from exc
 
-    imported_count = 0
     skipped_barcodes: list[str] = []
-
+    rows_by_barcode: dict[str, dict] = {}
     for row in rows:
         barcode = row["barcode"].strip()
         if not barcode:
             skipped_barcodes.append(row["name"])
             continue
+        # Si el archivo repite un código, la última fila es la versión vigente.
+        rows_by_barcode[barcode] = row
 
-        existing_product = db.scalar(
-            select(Product).where(Product.barcode == barcode)
+    existing_by_barcode: dict[str, Product] = {}
+    barcodes = list(rows_by_barcode)
+    for start in range(0, len(barcodes), IMPORT_QUERY_BATCH_SIZE):
+        batch = barcodes[start : start + IMPORT_QUERY_BATCH_SIZE]
+        products = db.scalars(
+            select(Product).where(Product.barcode.in_(batch))
+        ).all()
+        existing_by_barcode.update(
+            {product.barcode: product for product in products}
         )
 
+    imported_count = 0
+    updated_count = 0
+    for barcode, row in rows_by_barcode.items():
+        existing_product = existing_by_barcode.get(barcode)
         if existing_product is None:
             product = Product(**row)
             db.add(product)
             imported_count += 1
         else:
+            updated_count += 1
+            if visible_label_changed(existing_product, row):
+                mark_label_pending(existing_product)
             existing_product.name = row["name"]
             existing_product.price = row["price"]
+            if "weight" in row:
+                existing_product.weight = row["weight"]
+                existing_product.weight_unit = row["weight_unit"]
             existing_product.active = row["active"]
             existing_product.last_updated = row["last_updated"]
 
@@ -204,5 +276,6 @@ def import_products(
 
     return {
         "imported_count": imported_count,
+        "updated_count": updated_count,
         "skipped_barcodes": skipped_barcodes,
     }

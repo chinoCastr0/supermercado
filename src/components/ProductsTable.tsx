@@ -16,10 +16,14 @@ type Props = {
   totalPages: number;
   isLoading: boolean;
   hasAnyProducts: boolean;
+  selectedIds: ReadonlySet<number>;
   onPageChange: (page: number) => void;
   onCreate: () => void;
   onEdit: (product: Product) => void;
   onDelete: (product: Product) => void;
+  onToggleSelected: (productId: number) => void;
+  onTogglePage: (productIds: number[], selected: boolean) => void;
+  onPrintStatus: (product: Product, printed: boolean) => void;
 };
 
 export function ProductsTable({
@@ -29,13 +33,20 @@ export function ProductsTable({
   totalPages,
   isLoading,
   hasAnyProducts,
+  selectedIds,
   onPageChange,
   onCreate,
   onEdit,
   onDelete,
+  onToggleSelected,
+  onTogglePage,
+  onPrintStatus,
 }: Props) {
   const start = total ? (page - 1) * 10 + 1 : 0;
   const end = Math.min(page * 10, total);
+  const pageIds = products.map((product) => product.id);
+  const allPageSelected =
+    pageIds.length > 0 && pageIds.every((productId) => selectedIds.has(productId));
 
   if (isLoading)
     return (
@@ -69,11 +80,22 @@ export function ProductsTable({
         <table>
           <thead>
             <tr>
+              <th className="selection-cell">
+                <input
+                  type="checkbox"
+                  checked={allPageSelected}
+                  onChange={(event) =>
+                    onTogglePage(pageIds, event.target.checked)
+                  }
+                  aria-label="Seleccionar productos de esta página"
+                />
+              </th>
               <th>Producto</th>
               <th>Código de barras</th>
               <th>Precio</th>
               <th>Última actualización</th>
-              <th>Estado</th>
+              <th>Peso</th>
+              <th>IMPRESO</th>
               <th>
                 <span className="sr-only">Acciones</span>
               </th>
@@ -82,6 +104,14 @@ export function ProductsTable({
           <tbody>
             {products.map((product) => (
               <tr key={product.id}>
+                <td className="selection-cell" data-label="Seleccionar">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(product.id)}
+                    onChange={() => onToggleSelected(product.id)}
+                    aria-label={`Seleccionar ${product.name}`}
+                  />
+                </td>
                 <td data-label="Producto">
                   <div className="product-cell">
                     <span className="product-avatar">
@@ -106,13 +136,31 @@ export function ProductsTable({
                     {formatDate(product.last_updated)}
                   </time>
                 </td>
-                <td data-label="Estado">
-                  <span
-                    className={`status-pill ${product.active ? "active" : "inactive"}`}
+                <td data-label="Peso">
+                  {product.weight !== null && product.weight_unit ? (
+                    <strong>
+                      {Number(product.weight).toLocaleString("es-AR", {
+                        maximumFractionDigits: 2,
+                      })}{" "}
+                      {product.weight_unit}
+                    </strong>
+                  ) : (
+                    <span className="muted-value">Sin especificar</span>
+                  )}
+                </td>
+                <td data-label="Impreso">
+                  <button
+                    className={`print-status ${product.printed ? "printed" : "pending"}`}
+                    type="button"
+                    onClick={() => onPrintStatus(product, !product.printed)}
+                    aria-label={
+                      product.printed
+                        ? `Volver a marcar ${product.name} como pendiente`
+                        : `Marcar ${product.name} como impreso`
+                    }
                   >
-                    <i />
-                    {product.active ? "Activo" : "Inactivo"}
-                  </span>
+                    <i /> {product.printed ? "Impreso" : "Pendiente"}
+                  </button>
                 </td>
                 <td className="row-actions">
                   <button
