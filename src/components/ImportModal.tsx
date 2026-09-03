@@ -13,14 +13,18 @@ import { Modal } from "./Modal";
 
 type Props = {
   isSaving: boolean;
+  error?: string | null;
   onClose: () => void;
   onImport: (file: File) => Promise<boolean>;
 };
-export function ImportModal({ isSaving, onClose, onImport }: Props) {
+export function ImportModal({ error, isSaving, onClose, onImport }: Props) {
   const [file, setFile] = useState<File | null>(null);
+  const [submitted, setSubmitted] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const submit = async () => {
-    if (file && (await onImport(file))) onClose();
+    if (!file) return;
+    setSubmitted(true);
+    if (await onImport(file)) onClose();
   };
   return (
     <Modal titleId="import-modal-title" isBusy={isSaving} onClose={onClose}>
@@ -53,18 +57,24 @@ export function ImportModal({ isSaving, onClose, onImport }: Props) {
         <small>
           {file
             ? `${(file.size / 1024).toFixed(1)} KB`
-            : "Formatos .xlsx, .xls o .csv"}
+            : "Formatos .xlsx o .csv"}
         </small>
       </button>
       <input
         ref={fileInput}
         className="sr-only"
         type="file"
-        accept=".xlsx,.xls,.csv"
-        onChange={(event: ChangeEvent<HTMLInputElement>) =>
-          setFile(event.target.files?.[0] ?? null)
-        }
+        accept=".xlsx,.csv"
+        onChange={(event: ChangeEvent<HTMLInputElement>) => {
+          setFile(event.target.files?.[0] ?? null);
+          setSubmitted(false);
+        }}
       />
+      {submitted && error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      )}
       <div className="modal-actions">
         <button className="button secondary" type="button" onClick={onClose}>
           Cancelar

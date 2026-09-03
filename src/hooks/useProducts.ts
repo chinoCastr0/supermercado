@@ -27,6 +27,7 @@ export function useProducts() {
   const [isSaving, setIsSaving] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isGeneratingLabels, setIsGeneratingLabels] = useState(false);
+  const [isSearchingBarcode, setIsSearchingBarcode] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
 
   const load = useCallback(async () => {
@@ -75,21 +76,41 @@ export function useProducts() {
     }
   };
 
+  const findByBarcode = async (
+    barcode: string,
+  ): Promise<Product | null | undefined> => {
+    setIsSearchingBarcode(true);
+    setNotice(null);
+    try {
+      return await productsApi.findByBarcode(barcode);
+    } catch (error) {
+      setNotice({
+        kind: "error",
+        message: errorMessage(error, "No se pudo buscar el código escaneado."),
+      });
+      return undefined;
+    } finally {
+      setIsSearchingBarcode(false);
+    }
+  };
+
   const remove = async (product: Product) => {
     const confirmed = window.confirm(
       `¿Eliminar “${product.name}”? Esta acción no se puede deshacer.`,
     );
 
-    if (!confirmed) return;
+    if (!confirmed) return false;
     try {
       await productsApi.remove(product.id);
       setProducts((current) => current.filter(({ id }) => id !== product.id));
       setNotice({ kind: "success", message: "Producto eliminado." });
+      return true;
     } catch (error) {
       setNotice({
         kind: "error",
         message: errorMessage(error, "No se pudo eliminar."),
       });
+      return false;
     }
   };
 
@@ -207,10 +228,12 @@ export function useProducts() {
     isSaving,
     isExporting,
     isGeneratingLabels,
+    isSearchingBarcode,
     notice,
     setNotice,
     load,
     save,
+    findByBarcode,
     remove,
     importProducts,
     exportRegister,

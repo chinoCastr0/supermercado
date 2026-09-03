@@ -33,12 +33,19 @@ const EMPTY_DRAFT: ProductDraft = {
 };
 type Props = {
   product: Product | null;
+  initialBarcode?: string;
   isSaving: boolean;
   onClose: () => void;
   onSave: (payload: ProductPayload, productId?: number) => Promise<boolean>;
 };
 
-export function ProductModal({ product, isSaving, onClose, onSave }: Props) {
+export function ProductModal({
+  product,
+  initialBarcode = "",
+  isSaving,
+  onClose,
+  onSave,
+}: Props) {
   const [validationError, setValidationError] = useState<string | null>(null);
   const [draft, setDraft] = useState<ProductDraft>(() =>
     product
@@ -50,7 +57,7 @@ export function ProductModal({ product, isSaving, onClose, onSave }: Props) {
           weight_unit: product.weight_unit ?? "g",
           active: product.active,
         }
-      : EMPTY_DRAFT,
+      : { ...EMPTY_DRAFT, barcode: initialBarcode },
   );
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

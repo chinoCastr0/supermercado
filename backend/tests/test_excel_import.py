@@ -116,6 +116,11 @@ def test_parse_excel_rows_rejects_invalid_weight_unit(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="Fila 2.*Use g, kg, ml, l o u"):
         parse_excel_rows(path.read_bytes(), path.name)
+
+
+def test_parse_excel_rows_rejects_legacy_xls_with_clear_message() -> None:
+    with pytest.raises(ValueError, match=r"Convertí el archivo a \.xlsx o \.csv"):
+        parse_excel_rows(b"legacy-excel-content", "productos.xls")
 """Pruebas del adaptador de importación.
 
 IMPORTANCIA: documentan y protegen el contrato observable del parser.

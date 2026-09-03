@@ -156,15 +156,20 @@ def parse_excel_rows(file_bytes: bytes, filename: str) -> list[dict[str, Any]]:
     if not file_bytes:
         raise ValueError("El archivo está vacío")
 
-    if filename.lower().endswith(".csv"):
+    lower_filename = filename.lower()
+    if lower_filename.endswith(".csv"):
         dataframe = pd.read_csv(io.BytesIO(file_bytes), dtype=object)
-    else:
+    elif lower_filename.endswith(".xlsx"):
         # `dtype=object` evita que pandas convierta una columna de códigos con
         # celdas vacías a float (por ejemplo, `90435225` -> `90435225.0`).
         dataframe = pd.read_excel(
             io.BytesIO(file_bytes),
             engine="openpyxl",
             dtype=object,
+        )
+    else:
+        raise ValueError(
+            "Formato no compatible. Convertí el archivo a .xlsx o .csv."
         )
 
     if dataframe.empty:

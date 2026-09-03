@@ -10,14 +10,16 @@
  * NOTA DIDÁCTICA: LSP no se marca en este frontend porque no existe una jerarquía
  * de subtipos intercambiables; atribuirlo aquí sería forzar el principio.
  */
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import "./App.css";
+import type { ScannerLookupOutcome } from "./components/BarcodeScanner";
 import { ImportModal } from "./components/ImportModal";
 import {
   LabelPreviewModal,
   type LabelPreview,
 } from "./components/LabelPreviewModal";
 import { Layout } from "./components/Layout";
+import { Modal } from "./components/Modal";
 import { NoticeBanner } from "./components/NoticeBanner";
 import { ProductFilters } from "./components/ProductFilters";
 import { ProductModal } from "./components/ProductModal";
@@ -32,6 +34,11 @@ import type {
 } from "./types/product";
 
 const PAGE_SIZE = 10;
+const BarcodeScanner = lazy(() =>
+  import("./components/BarcodeScanner").then(({ BarcodeScanner }) => ({
+    default: BarcodeScanner,
+  })),
+);
 
 function App() {
   const inventory = useProducts();
@@ -40,8 +47,11 @@ function App() {
   const [printStatus, setPrintStatus] = useState<PrintFilter>("all");
   const [sort, setSort] = useState<ProductSort>("name");
   const [page, setPage] = useState(1);
-  const [modal, setModal] = useState<"product" | "import" | null>(null);
+  const [modal, setModal] = useState<
+    "product" | "import" | "scanner" | null
+  >(null);
   const [editing, setEditing] = useState<Product | null>(null);
+  const [newProductBarcode, setNewProductBarcode] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
   const [labelPreview, setLabelPreview] = useState<LabelPreview | null>(null);
 
@@ -87,13 +97,35 @@ function App() {
   const closeModal = () => setModal(null);
   const createProduct = () => {
     setEditing(null);
+    setNewProductBarcode("");
     setModal("product");
   };
   const editProduct = (product: Product) => {
     setEditing(product);
+    setNewProductBarcode("");
+    setModal("product");
+  };
+  const handleScannedBarcode = async (
+    barcode: string,
+  ): Promise<ScannerLookupOutcome> => {
+    const product = await inventory.findByBarcode(barcode);
+    if (product === undefined) return "error";
+    if (product === null) return "not-found";
+    editProduct(product);
+    return "found";
+  };
+  const createScannedProduct = (barcode: string) => {
+    setEditing(null);
+    setNewProductBarcode(barcode);
     setModal("product");
   };
   const pendingFiltered = filtered.filter((product) => !product.printed);
+  const availableProductIds = new Set(
+    inventory.products.map((product) => product.id),
+  );
+  const selectedProductIds = [...selectedIds].filter((productId) =>
+    availableProductIds.has(productId),
+  );
   const toggleSelected = (productId: number) => {
     setSelectedIds((current) => {
       const next = new Set(current);
@@ -119,9 +151,8 @@ function App() {
     });
   };
   const generateLabels = async () => {
-    const availableIds = new Set(inventory.products.map((product) => product.id));
     const requestedIds = selectedIds.size
-      ? [...selectedIds].filter((productId) => availableIds.has(productId))
+      ? selectedProductIds
       : pendingFiltered.map((product) => product.id);
     if (!requestedIds.length) {
       inventory.setNotice({
@@ -160,17 +191,32 @@ function App() {
     }
   };
   const markSelection = async (printed: boolean) => {
-    if (!selectedIds.size) return;
+    if (!selectedProductIds.length) {
+      setSelectedIds(new Set());
+      inventory.setNotice({
+        kind: "error",
+        message: "Los productos seleccionados ya no existen.",
+      });
+      return;
+    }
     const label = printed ? "impresos" : "pendientes";
     if (
       !window.confirm(
-        `¿Marcar ${selectedIds.size} producto${selectedIds.size === 1 ? "" : "s"} como ${label}?`,
+        `¿Marcar ${selectedProductIds.length} producto${selectedProductIds.length === 1 ? "" : "s"} como ${label}?`,
       )
     )
       return;
-    if (await inventory.setPrintStatus([...selectedIds], printed)) {
+    if (await inventory.setPrintStatus(selectedProductIds, printed)) {
       setSelectedIds(new Set());
     }
+  };
+  const deleteProduct = async (product: Product) => {
+    if (!(await inventory.remove(product))) return;
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      next.delete(product.id);
+      return next;
+    });
   };
 
   return (
@@ -185,6 +231,13 @@ function App() {
             <p>Consultá y administrá todo tu inventario desde un solo lugar.</p>
           </div>
           <div className="heading-actions">
+            <button
+              className="button secondary scan-button"
+              type="button"
+              onClick={() => setModal("scanner")}
+            >
+              ▣ <span>Escanear</span>
+            </button>
             <button
               className="button secondary"
               type="button"
@@ -219,7 +272,7 @@ function App() {
         <section className="data-card" aria-labelledby="table-title">
           <div className="print-toolbar">
             <div>
-              <strong>{selectedIds.size} seleccionados</strong>
+              <strong>{selectedProductIds.length} seleccionados</strong>
               <span>
                 {pendingFiltered.length} pendientes en los resultados actuales
               </span>
@@ -236,7 +289,7 @@ function App() {
               <button
                 className="button secondary"
                 type="button"
-                disabled={!selectedIds.size || inventory.isSaving}
+                disabled={!selectedProductIds.length || inventory.isSaving}
                 onClick={() => void markSelection(false)}
               >
                 Volver a pendientes
@@ -244,7 +297,7 @@ function App() {
               <button
                 className="button secondary"
                 type="button"
-                disabled={!selectedIds.size || inventory.isSaving}
+                disabled={!selectedProductIds.length || inventory.isSaving}
                 onClick={() => void markSelection(true)}
               >
                 Marcar impresos
@@ -254,7 +307,7 @@ function App() {
                 type="button"
                 disabled={
                   inventory.isGeneratingLabels ||
-                  (!selectedIds.size && !pendingFiltered.length)
+                  (!selectedProductIds.length && !pendingFiltered.length)
                 }
                 onClick={() => void generateLabels()}
               >
@@ -293,7 +346,7 @@ function App() {
             onPageChange={setPage}
             onCreate={createProduct}
             onEdit={editProduct}
-            onDelete={(product) => void inventory.remove(product)}
+            onDelete={(product) => void deleteProduct(product)}
             onToggleSelected={toggleSelected}
             onTogglePage={togglePage}
             onPrintStatus={(product, printed) =>
@@ -304,8 +357,9 @@ function App() {
       </section>
       {modal === "product" && (
         <ProductModal
-          key={editing?.id ?? "new"}
+          key={editing?.id ?? `new-${newProductBarcode || "blank"}`}
           product={editing}
+          initialBarcode={newProductBarcode}
           isSaving={inventory.isSaving}
           onClose={closeModal}
           onSave={inventory.save}
@@ -313,10 +367,43 @@ function App() {
       )}
       {modal === "import" && (
         <ImportModal
+          error={
+            inventory.notice?.kind === "error"
+              ? inventory.notice.message
+              : null
+          }
           isSaving={inventory.isSaving}
           onClose={closeModal}
           onImport={inventory.importProducts}
         />
+      )}
+      {modal === "scanner" && (
+        <Suspense
+          fallback={
+            <Modal
+              titleId="barcode-scanner-loading-title"
+              isBusy={false}
+              onClose={closeModal}
+              className="barcode-scanner-modal"
+            >
+              <div className="modal-header scanner-header">
+                <h2 id="barcode-scanner-loading-title">Cargando lector…</h2>
+                <button type="button" onClick={closeModal} aria-label="Cerrar">
+                  ×
+                </button>
+              </div>
+              <div className="scanner-feedback" role="status">
+                <strong>Preparando el lector…</strong>
+              </div>
+            </Modal>
+          }
+        >
+          <BarcodeScanner
+            onClose={closeModal}
+            onDetected={handleScannedBarcode}
+            onCreateProduct={createScannedProduct}
+          />
+        </Suspense>
       )}
       {labelPreview && (
         <LabelPreviewModal

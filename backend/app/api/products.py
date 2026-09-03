@@ -124,6 +124,26 @@ def export_register_products(db: Session = Depends(get_db)) -> Response:
 
 
 @router.get(
+    "/by-barcode",
+    response_model=ProductResponse,
+)
+def get_product_by_barcode(
+    barcode: str = Query(min_length=1, max_length=50),
+    db: Session = Depends(get_db),
+) -> Product:
+    """Busca un producto por el valor textual exacto de su código de barras."""
+    product = db.scalar(
+        select(Product).where(Product.barcode == barcode.strip())
+    )
+    if product is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f'No existe un producto con el código de barras "{barcode}".',
+        )
+    return product
+
+
+@router.get(
     "/{product_id}",
     response_model=ProductResponse,
 )

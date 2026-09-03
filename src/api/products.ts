@@ -58,6 +58,15 @@ export const productsApi = {
     }
   },
 
+  async findByBarcode(barcode: string): Promise<Product | null> {
+    const response = await fetch(
+      `${API_URL}/products/by-barcode?barcode=${encodeURIComponent(barcode)}`,
+    );
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error(await readError(response));
+    return response.json() as Promise<Product>;
+  },
+
   save(payload: ProductPayload, productId?: number): Promise<Product> {
     return request(`/products${productId ? `/${productId}` : ""}`, {
       method: productId ? "PUT" : "POST",
