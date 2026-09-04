@@ -32,6 +32,7 @@ import type {
   ProductSort,
   StatusFilter,
 } from "./types/product";
+import { compareMoney } from "./utils/money";
 
 const PAGE_SIZE = 10;
 const BarcodeScanner = lazy(() =>
@@ -73,9 +74,9 @@ function App() {
       })
       .sort((left, right) => {
         if (sort === "price-asc")
-          return Number(left.price) - Number(right.price);
+          return compareMoney(left.price, right.price);
         if (sort === "price-desc")
-          return Number(right.price) - Number(left.price);
+          return compareMoney(right.price, left.price);
         if (sort === "updated-desc")
           return Date.parse(right.last_updated) - Date.parse(left.last_updated);
         return left.name.localeCompare(right.name, "es");

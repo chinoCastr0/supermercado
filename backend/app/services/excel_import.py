@@ -19,6 +19,8 @@ from typing import Any
 
 import pandas as pd
 
+from app.money import parse_money
+
 
 WEIGHT_PATTERN = re.compile(
     r"^\s*(\d+(?:[.,]\d+)?)\s*"
@@ -71,22 +73,9 @@ def _coerce_barcode(value: Any) -> str | None:
 
 
 def _coerce_decimal(value: Any) -> Decimal | None:
-    if value is None:
-        return None
-
-    if isinstance(value, Decimal):
-        return value
-
-    if isinstance(value, (int, float)):
-        return Decimal(str(value))
-
-    text = str(value).strip().replace(".", "", 1).replace(",", ".")
-    if not text:
-        return None
-
     try:
-        return Decimal(text)
-    except Exception:
+        return parse_money(value)
+    except (TypeError, ValueError):
         return None
 
 

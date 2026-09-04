@@ -21,6 +21,7 @@ import {
   registerByteLength,
   registerTextError,
 } from "../utils/registerFormat";
+import { normalizeMoneyInput } from "../utils/money";
 import { Modal } from "./Modal";
 
 const EMPTY_DRAFT: ProductDraft = {
@@ -72,15 +73,23 @@ export function ProductModal({
       setValidationError(error);
       return;
     }
+    const price = normalizeMoneyInput(draft.price);
+    if (!price) {
+      setValidationError(
+        "Ingresá un precio positivo con hasta dos decimales (por ejemplo, 1234,56).",
+      );
+      return;
+    }
     setValidationError(null);
     const weight = draft.weight ? Number(draft.weight) : null;
     if (
       await onSave(
         {
           ...draft,
-          price: Number(draft.price),
+          price,
           weight,
           weight_unit: weight === null ? null : draft.weight_unit,
+          ...(product ? { expected_revision: product.revision } : {}),
         },
         product?.id,
       )
@@ -143,14 +152,14 @@ export function ProductModal({
           Precio
           <input
             required
-            min="0.01"
-            step="0.01"
-            type="number"
+            inputMode="decimal"
+            type="text"
             value={draft.price}
-            onChange={(event) =>
-              setDraft({ ...draft, price: event.target.value })
-            }
-            placeholder="0,00"
+            onChange={(event) => {
+              setValidationError(null);
+              setDraft({ ...draft, price: event.target.value });
+            }}
+            placeholder="Ej. 1.234,56"
           />
         </label>
         <div className="measurement-fields">

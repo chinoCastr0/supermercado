@@ -33,6 +33,18 @@ class LabelProduct(Protocol):
 
 
 @dataclass(frozen=True)
+class LabelProductSnapshot:
+    """Immutable values used to create and later reprint one label."""
+
+    id: int
+    barcode: str
+    name: str
+    price: Decimal
+    weight: Decimal | None
+    weight_unit: str | None
+
+
+@dataclass(frozen=True)
 class ComparablePrice:
     label: str
     price: Decimal
@@ -195,7 +207,7 @@ def _draw_label(
     pdf.setFont("Helvetica-Bold", name_size)
     pdf.drawString(x + padding, y + height - 10, fitted_name)
 
-    price_text = format_ars(Decimal(product.price), keep_cents=False)
+    price_text = format_ars(Decimal(product.price), keep_cents=True)
     price_size = _fit_font_size(
         price_text,
         "Helvetica-Bold",
@@ -285,7 +297,7 @@ def build_labels_pdf(products: list[LabelProduct]) -> LabelPdfResult:
         return LabelPdfResult(b"", [], warnings)
 
     output = BytesIO()
-    pdf = canvas.Canvas(output, pagesize=A4, pageCompression=1)
+    pdf = canvas.Canvas(output, pagesize=A4, pageCompression=1, invariant=1)
     page_width, page_height = A4
     margin_x = 7 * mm
     margin_y = 7 * mm

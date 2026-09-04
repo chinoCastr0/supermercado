@@ -3,8 +3,10 @@ from decimal import Decimal
 from io import BytesIO
 
 import pytest
+import pymupdf
 from pypdf import PdfReader
 from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import mm
 
 from app.services.label_pdf import (
     BARCODE_HEIGHT,
@@ -114,3 +116,74 @@ def test_invalid_barcode_is_skipped_without_blocking_other_labels() -> None:
 
     assert result.generated_product_ids == [1]
     assert [warning.product_id for warning in result.warnings] == [2]
+
+
+@pytest.mark.parametrize(
+    ("price", "expected"),
+    [
+        ("10", "$ 10,00"),
+        ("10.50", "$ 10,50"),
+        ("1234.56", "$ 1.234,56"),
+        ("9999999999.99", "$ 9.999.999.999,99"),
+    ],
+)
+def test_pdf_prints_the_persisted_price_with_two_cents(
+    price: str,
+    expected: str,
+) -> None:
+    product = LabelProductStub(
+        1,
+        "TRACE-PRICE",
+        "Precio persistido",
+        Decimal(price),
+        None,
+        None,
+    )
+
+    result = build_labels_pdf([product])
+    text = PdfReader(BytesIO(result.content)).pages[0].extract_text() or ""
+
+    assert expected in text
+
+
+def test_prices_are_inside_their_cells_without_overlapping_product_names() -> None:
+    cases = [
+        ("10", "$ 10,00"),
+        ("10.50", "$ 10,50"),
+        ("1234.56", "$ 1.234,56"),
+        ("9999999999.99", "$ 9.999.999.999,99"),
+    ]
+    products = [
+        LabelProductStub(
+            index,
+            f"VISUAL-{index}",
+            f"Producto {index}",
+            Decimal(price),
+            None,
+            None,
+        )
+        for index, (price, _) in enumerate(cases, start=1)
+    ]
+
+    result = build_labels_pdf(products)
+    document = pymupdf.open(stream=result.content, filetype="pdf")
+    page = document[0]
+    margin = 7 * mm
+    cell_width = (A4[0] - margin * 2) / 3
+    cell_height = (A4[1] - margin * 2) / 8
+
+    for position, (_, expected_price) in enumerate(cases):
+        row, column = divmod(position, 3)
+        cell = pymupdf.Rect(
+            margin + column * cell_width,
+            margin + row * cell_height,
+            margin + (column + 1) * cell_width,
+            margin + (row + 1) * cell_height,
+        )
+        price_rects = page.search_for(expected_price)
+        name_rects = page.search_for(f"PRODUCTO {position + 1}")
+
+        assert len(price_rects) == 1
+        assert len(name_rects) == 1
+        assert cell.contains(price_rects[0])
+        assert not price_rects[0].intersects(name_rects[0])

@@ -1,6 +1,6 @@
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 import struct
 
 import pytest
@@ -90,3 +90,28 @@ def test_label_print_state_never_changes_presur_file() -> None:
     )
 
     assert build_presur_file([product]) == build_presur_file([printed])
+
+
+def test_price_1234_56_round_trips_through_register_format_to_same_cents() -> None:
+    product = ProductStub(16, "TRACE-1234", "Trazabilidad", Decimal("1234.56"))
+
+    result = build_presur_file([product])
+    exported = Decimal(str(struct.unpack("<f", result[2:6])[0])).quantize(
+        Decimal("0.01"),
+        rounding=ROUND_HALF_UP,
+    )
+
+    assert product.price == Decimal("1234.56")
+    assert exported == Decimal("1234.56")
+
+
+def test_rejects_register_price_that_cannot_preserve_exact_cents() -> None:
+    product = ProductStub(
+        17,
+        "TRACE-HIGH",
+        "Precio alto",
+        Decimal("9999999999.99"),
+    )
+
+    with pytest.raises(RegisterExportError, match="centavos exactos"):
+        build_presur_file([product])

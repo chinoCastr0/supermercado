@@ -58,6 +58,13 @@ class Product(Base):
         nullable=False,
     )
 
+    revision: Mapped[int] = mapped_column(
+        Integer,
+        default=1,
+        server_default=text("1"),
+        nullable=False,
+    )
+
     label_version: Mapped[int] = mapped_column(
         Integer,
         default=1,

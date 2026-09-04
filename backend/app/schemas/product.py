@@ -10,7 +10,16 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Annotated, Literal, Self
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    model_validator,
+)
+
+from app.money import parse_money
 
 
 REGISTER_NAME_BYTES = 18
@@ -44,6 +53,11 @@ def _register_name(value: str) -> str:
 RegisterBarcode = Annotated[str, AfterValidator(_register_barcode)]
 RegisterName = Annotated[str, AfterValidator(_register_name)]
 WeightUnit = Literal["g", "kg", "ml", "l", "u"]
+Money = Annotated[
+    Decimal,
+    BeforeValidator(parse_money),
+    Field(gt=0, max_digits=12, decimal_places=2),
+]
 
 
 class WeightFields(BaseModel):
@@ -64,7 +78,7 @@ class ProductBase(WeightFields):
 
     barcode: str = Field(min_length=1, max_length=50)
     name: str = Field(min_length=1, max_length=255)
-    price: Decimal = Field(gt=0)
+    price: Money
     active: bool = True
 
 
@@ -78,12 +92,10 @@ class ProductCreate(ProductBase):
 class ProductUpdate(WeightFields):
     """Campos opcionales para permitir actualizaciones parciales."""
 
+    expected_revision: int = Field(ge=1)
     barcode: RegisterBarcode | None = None
     name: RegisterName | None = None
-    price: Decimal | None = Field(
-        default=None,
-        gt=0,
-    )
+    price: Money | None = None
     active: bool | None = None
 
 
@@ -91,10 +103,23 @@ class ProductResponse(ProductBase):
     """Representación pública que agrega identidad y fecha del servidor."""
 
     id: int
+    revision: int
     last_updated: datetime
     label_version: int
     printed: bool
     printed_at: datetime | None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ProductPriceChangeResponse(BaseModel):
+    id: int
+    product_id: int
+    barcode: str
+    old_price: Decimal | None
+    new_price: Decimal
+    source: str
+    changed_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 

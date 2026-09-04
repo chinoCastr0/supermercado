@@ -44,8 +44,10 @@ export function ImportModal({ error, isSaving, onClose, onImport }: Props) {
         <code>1,5 l</code> o <code>6 unidades</code>) y{" "}
         <strong>last_updated</strong> o{" "}
         <strong>fecha</strong>. También podés separar el valor en las columnas{" "}
-        <strong>peso</strong> y <strong>unidad</strong>. Los productos existentes
-        se actualizarán.
+        <strong>peso</strong> y <strong>unidad</strong>. Para un barcode existente,
+        sólo se actualiza el precio cuando el importado es mayor. Nombre, estado,
+        peso, unidad y fecha se conservan siempre. Todos los campos se cargan
+        únicamente cuando el barcode es nuevo.
       </p>
       <button
         className={`dropzone ${file ? "has-file" : ""}`}

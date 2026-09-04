@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 
 import pandas as pd
@@ -21,7 +22,7 @@ def test_parse_excel_rows_from_simple_dataframe(tmp_path: Path) -> None:
 
     assert len(rows) == 2
     assert rows[0]["barcode"] == "111"
-    assert rows[0]["price"] == 12.5
+    assert rows[0]["price"] == Decimal("12.50")
     assert rows[1]["name"] == "Arroz"
     assert "weight" not in rows[0]
     assert isinstance(rows[0]["last_updated"], datetime)

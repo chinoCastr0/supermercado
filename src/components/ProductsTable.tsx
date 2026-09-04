@@ -7,7 +7,8 @@
  * SOLUCIÓN ESPECÍFICA: columnas, diez filas por página y textos del inventario.
  */
 import type { Product } from "../types/product";
-import { formatDate, money } from "../utils/formatters";
+import { formatDate } from "../utils/formatters";
+import { formatMoney } from "../utils/money";
 
 type Props = {
   products: Product[];
@@ -128,7 +129,7 @@ export function ProductsTable({
                 </td>
                 <td data-label="Precio">
                   <strong className="price">
-                    {money.format(Number(product.price))}
+                    {formatMoney(product.price)}
                   </strong>
                 </td>
                 <td data-label="Actualizado">

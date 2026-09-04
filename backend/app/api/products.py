@@ -13,9 +13,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.models.price_change import ProductPriceChange
 from app.models.product import Product
 from app.schemas.product import (
     ProductCreate,
+    ProductPriceChangeResponse,
     ProductResponse,
     ProductUpdate,
 )
@@ -41,10 +43,18 @@ def create_product(
     db: Session = Depends(get_db),
 ) -> Product:
     product = Product(**product_data.model_dump())
-
-    db.add(product)
-
     try:
+        db.add(product)
+        db.flush()
+        db.add(
+            ProductPriceChange(
+                product_id=product.id,
+                barcode=product.barcode,
+                old_price=None,
+                new_price=product.price,
+                source="manual_create",
+            )
+        )
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -162,6 +172,23 @@ def get_product(
     return product
 
 
+@router.get(
+    "/{product_id}/price-history",
+    response_model=list[ProductPriceChangeResponse],
+)
+def get_product_price_history(
+    product_id: int,
+    db: Session = Depends(get_db),
+) -> list[ProductPriceChange]:
+    return list(
+        db.scalars(
+            select(ProductPriceChange)
+            .where(ProductPriceChange.product_id == product_id)
+            .order_by(ProductPriceChange.id)
+        ).all()
+    )
+
+
 @router.put(
     "/{product_id}",
     response_model=ProductResponse,
@@ -171,7 +198,9 @@ def update_product(
     product_data: ProductUpdate,
     db: Session = Depends(get_db),
 ) -> Product:
-    product = db.get(Product, product_id)
+    product = db.scalar(
+        select(Product).where(Product.id == product_id).with_for_update()
+    )
 
     if product is None:
         raise HTTPException(
@@ -180,12 +209,41 @@ def update_product(
         )
 
     update_data = product_data.model_dump(exclude_unset=True)
+    expected_revision = update_data.pop("expected_revision")
+    if product.revision != expected_revision:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "El producto cambió desde que se abrió. Recargá la lista "
+                "y revisá el precio antes de volver a guardar."
+            ),
+        )
 
-    if visible_label_changed(product, update_data):
+    changed_data = {
+        field: value
+        for field, value in update_data.items()
+        if getattr(product, field) != value
+    }
+    if not changed_data:
+        return product
+
+    if visible_label_changed(product, changed_data):
         mark_label_pending(product)
 
-    for field, value in update_data.items():
+    old_price = product.price
+    for field, value in changed_data.items():
         setattr(product, field, value)
+    product.revision += 1
+    if "price" in changed_data:
+        db.add(
+            ProductPriceChange(
+                product_id=product.id,
+                barcode=product.barcode,
+                old_price=old_price,
+                new_price=product.price,
+                source="manual_update",
+            )
+        )
 
     try:
         db.commit()
@@ -259,7 +317,9 @@ def import_products(
     for start in range(0, len(barcodes), IMPORT_QUERY_BATCH_SIZE):
         batch = barcodes[start : start + IMPORT_QUERY_BATCH_SIZE]
         products = db.scalars(
-            select(Product).where(Product.barcode.in_(batch))
+            select(Product)
+            .where(Product.barcode.in_(batch))
+            .with_for_update()
         ).all()
         existing_by_barcode.update(
             {product.barcode: product for product in products}
@@ -267,25 +327,55 @@ def import_products(
 
     imported_count = 0
     updated_count = 0
+    price_updated_count = 0
+    preserved_price_barcodes: list[str] = []
+    new_products: list[Product] = []
     for barcode, row in rows_by_barcode.items():
         existing_product = existing_by_barcode.get(barcode)
         if existing_product is None:
             product = Product(**row)
             db.add(product)
+            new_products.append(product)
             imported_count += 1
         else:
             updated_count += 1
-            if visible_label_changed(existing_product, row):
-                mark_label_pending(existing_product)
-            existing_product.name = row["name"]
+            # Para un barcode existente, la importacion solo puede aumentar el
+            # precio. Nombre, estado, peso, unidad y fechas pertenecen al
+            # registro existente y nunca se copian desde el archivo.
+            if row["price"] <= existing_product.price:
+                if row["price"] < existing_product.price:
+                    preserved_price_barcodes.append(barcode)
+                continue
+
+            old_price = existing_product.price
+            mark_label_pending(existing_product)
             existing_product.price = row["price"]
-            if "weight" in row:
-                existing_product.weight = row["weight"]
-                existing_product.weight_unit = row["weight_unit"]
-            existing_product.active = row["active"]
-            existing_product.last_updated = row["last_updated"]
+            existing_product.revision += 1
+            price_updated_count += 1
+            db.add(
+                ProductPriceChange(
+                    product_id=existing_product.id,
+                    barcode=existing_product.barcode,
+                    old_price=old_price,
+                    new_price=existing_product.price,
+                    source="import_update",
+                )
+            )
 
     try:
+        db.flush()
+        db.add_all(
+            [
+                ProductPriceChange(
+                    product_id=product.id,
+                    barcode=product.barcode,
+                    old_price=None,
+                    new_price=product.price,
+                    source="import_create",
+                )
+                for product in new_products
+            ]
+        )
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -297,5 +387,7 @@ def import_products(
     return {
         "imported_count": imported_count,
         "updated_count": updated_count,
+        "price_updated_count": price_updated_count,
+        "preserved_price_barcodes": preserved_price_barcodes,
         "skipped_barcodes": skipped_barcodes,
     }

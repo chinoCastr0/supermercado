@@ -8,7 +8,7 @@
  * SOLUCIÓN ESPECÍFICA: mensajes en español, confirmación de borrado y recarga
  * completa luego de guardar o importar.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { productsApi } from "../api/products";
 import type {
   GeneratedLabels,
@@ -29,21 +29,26 @@ export function useProducts() {
   const [isGeneratingLabels, setIsGeneratingLabels] = useState(false);
   const [isSearchingBarcode, setIsSearchingBarcode] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
+  const latestLoad = useRef(0);
 
   const load = useCallback(async () => {
+    const requestId = ++latestLoad.current;
     setIsLoading(true);
     try {
-      setProducts(await productsApi.listAll());
+      const loadedProducts = await productsApi.listAll();
+      if (requestId === latestLoad.current) setProducts(loadedProducts);
     } catch (error) {
-      setNotice({
-        kind: "error",
-        message: errorMessage(
-          error,
-          "No se pudo conectar con la base de datos.",
-        ),
-      });
+      if (requestId === latestLoad.current) {
+        setNotice({
+          kind: "error",
+          message: errorMessage(
+            error,
+            "No se pudo conectar con la base de datos.",
+          ),
+        });
+      }
     } finally {
-      setIsLoading(false);
+      if (requestId === latestLoad.current) setIsLoading(false);
     }
   }, []);
 
@@ -58,7 +63,11 @@ export function useProducts() {
     setIsSaving(true);
     setNotice(null);
     try {
-      await productsApi.save(payload, productId);
+      const saved = await productsApi.save(payload, productId);
+      setProducts((current) => {
+        const withoutSaved = current.filter(({ id }) => id !== saved.id);
+        return [...withoutSaved, saved];
+      });
       setNotice({
         kind: "success",
         message: productId ? "Producto actualizado." : "Producto agregado.",
@@ -120,9 +129,10 @@ export function useProducts() {
     try {
       const result = await productsApi.import(file);
       const omitted = result.skipped_barcodes.length;
+      const preserved = result.preserved_price_barcodes.length;
       setNotice({
         kind: "success",
-        message: `Importación completa: ${result.imported_count} nuevos, ${result.updated_count} actualizados${omitted ? ` y ${omitted} omitidos por no tener código de barras` : ""}.`,
+        message: `Importación completa: ${result.imported_count} nuevos, ${result.updated_count} existentes, ${result.price_updated_count} precios aumentados${preserved ? ` y ${preserved} precios menores rechazados` : ""}${omitted ? `; ${omitted} omitidos por no tener código de barras` : ""}.`,
       });
       await load();
       return true;

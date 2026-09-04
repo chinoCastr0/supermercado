@@ -1,8 +1,9 @@
 """Persistencia de lotes de carteles y versiones incluidas."""
 
 from datetime import datetime, timezone
+from decimal import Decimal
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String
+from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -41,3 +42,9 @@ class PrintBatchItem(Base):
     )
     product_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     label_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    position: Mapped[int | None] = mapped_column(Integer)
+    snapshot_barcode: Mapped[str | None] = mapped_column(String(50))
+    snapshot_name: Mapped[str | None] = mapped_column(String(255))
+    snapshot_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    snapshot_weight: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    snapshot_weight_unit: Mapped[str | None] = mapped_column(String(2))

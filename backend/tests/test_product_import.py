@@ -18,7 +18,7 @@ def test_import_updates_existing_and_creates_new_products_in_one_batch() -> None
     Base.metadata.create_all(engine)
     dataframe = pd.DataFrame(
         [
-            {"barcode": "111", "name": "Leche", "price": 1800},
+            {"barcode": "111", "name": "Nombre importado", "price": 1800},
             {"barcode": "222", "name": "Arroz", "price": 1200},
             {"barcode": None, "name": "Sin código", "price": 900},
         ]
@@ -30,8 +30,11 @@ def test_import_updates_existing_and_creates_new_products_in_one_batch() -> None
     with Session(engine) as db:
         existing = Product(
             barcode="111",
-            name="Leche",
+            name="Nombre original",
             price=Decimal("1500"),
+            weight=Decimal("500"),
+            weight_unit="g",
+            active=False,
             label_version=3,
             printed_label_version=3,
             printed_at=datetime.now(timezone.utc),
@@ -45,10 +48,16 @@ def test_import_updates_existing_and_creates_new_products_in_one_batch() -> None
         assert result == {
             "imported_count": 1,
             "updated_count": 1,
+            "price_updated_count": 1,
+            "preserved_price_barcodes": [],
             "skipped_barcodes": ["Sin código"],
         }
         assert [product.barcode for product in products] == ["111", "222"]
         assert products[0].price == Decimal("1800.00")
+        assert products[0].name == "Nombre original"
+        assert products[0].weight == Decimal("500.00")
+        assert products[0].weight_unit == "g"
+        assert products[0].active is False
         assert products[0].label_version == 4
         assert products[0].printed is False
         assert products[1].printed is False

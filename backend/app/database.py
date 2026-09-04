@@ -45,7 +45,8 @@ def initialize_database() -> None:
 
     if "products" not in inspect(engine).get_table_names():
         return
-    columns = {column["name"] for column in inspect(engine).get_columns("products")}
+    inspector = inspect(engine)
+    columns = {column["name"] for column in inspector.get_columns("products")}
     with engine.begin() as connection:
         if "last_updated" not in columns:
             column_type = (
@@ -92,6 +93,36 @@ def initialize_database() -> None:
                     f"{timestamp_type}"
                 )
             )
+        if "revision" not in columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE products ADD COLUMN revision "
+                    "INTEGER NOT NULL DEFAULT 1"
+                )
+            )
+
+        if "print_batch_items" not in inspector.get_table_names():
+            return
+        item_columns = {
+            column["name"]
+            for column in inspector.get_columns("print_batch_items")
+        }
+        snapshot_columns = {
+            "position": "INTEGER",
+            "snapshot_barcode": "VARCHAR(50)",
+            "snapshot_name": "VARCHAR(255)",
+            "snapshot_price": "NUMERIC(12, 2)",
+            "snapshot_weight": "NUMERIC(10, 2)",
+            "snapshot_weight_unit": "VARCHAR(2)",
+        }
+        for column_name, column_type in snapshot_columns.items():
+            if column_name not in item_columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE print_batch_items "
+                        f"ADD COLUMN {column_name} {column_type}"
+                    )
+                )
 
 
 def get_db() -> Generator[Session, None, None]:

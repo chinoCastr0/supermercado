@@ -12,10 +12,11 @@ export type Product = {
   id: number;
   barcode: string;
   name: string;
-  price: number | string;
+  price: string;
   weight: number | string | null;
   weight_unit: WeightUnit | null;
   active: boolean;
+  revision: number;
   last_updated: string;
   label_version: number;
   printed: boolean;
@@ -31,10 +32,17 @@ export type ProductDraft = {
   active: boolean;
 };
 
-export type ProductPayload = Omit<ProductDraft, "price" | "weight" | "weight_unit"> & {
-  price: number;
+export type ProductPayload = Omit<ProductDraft, "weight" | "weight_unit"> & {
   weight: number | null;
   weight_unit: WeightUnit | null;
+  expected_revision?: number;
+};
+export type ProductImportResult = {
+  imported_count: number;
+  updated_count: number;
+  price_updated_count: number;
+  preserved_price_barcodes: string[];
+  skipped_barcodes: string[];
 };
 export type Notice = { kind: "success" | "error"; message: string } | null;
 export type StatusFilter = "all" | "active" | "inactive";

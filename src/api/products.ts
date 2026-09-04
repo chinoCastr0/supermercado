@@ -12,6 +12,7 @@ import type {
   GeneratedLabels,
   LabelWarning,
   Product,
+  ProductImportResult,
   ProductPayload,
 } from "../types/product";
 
@@ -79,13 +80,7 @@ export const productsApi = {
     return request(`/products/${productId}`, { method: "DELETE" });
   },
 
-  import(
-    file: File,
-  ): Promise<{
-    imported_count: number;
-    updated_count: number;
-    skipped_barcodes: string[];
-  }> {
+  import(file: File): Promise<ProductImportResult> {
     const body = new FormData();
     body.append("file", file);
     return request("/products/import", { method: "POST", body });

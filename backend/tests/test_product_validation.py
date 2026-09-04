@@ -55,4 +55,4 @@ def test_weight_requires_supported_unit() -> None:
     assert product.weight_unit == "ml"
 
     with pytest.raises(ValidationError, match="deben informarse juntos"):
-        ProductUpdate(weight=500)
+        ProductUpdate(expected_revision=1, weight=500)

@@ -1,10 +1,11 @@
 """Serializa el catálogo al formato binario PRESUR1.DAT de la caja."""
 
 from collections.abc import Iterable
-from decimal import Decimal
-import math
+from decimal import Decimal, ROUND_HALF_UP
 import struct
 from typing import Protocol
+
+from app.money import CENT, parse_money
 
 
 RECORD_COUNT = 20_000
@@ -56,10 +57,37 @@ def _assign_plu(product: ExportableProduct, used: set[int]) -> int:
     raise RegisterExportError("No quedan posiciones PLU disponibles.")
 
 
-def _record(plu: int, price: float, name: bytes, barcode: bytes) -> bytes:
+def _register_price_bytes(price: Decimal, product_id: int) -> bytes:
+    """Encode the required float32 only when it round-trips to the same cents."""
+
+    try:
+        normalized = parse_money(price)
+    except (TypeError, ValueError) as exc:
+        raise RegisterExportError(
+            f"El producto ID {product_id} tiene un precio inválido."
+        ) from exc
+    if normalized <= 0:
+        raise RegisterExportError(
+            f"El producto ID {product_id} tiene un precio inválido."
+        )
+
+    encoded = struct.pack("<f", float(normalized))
+    restored = Decimal(str(struct.unpack("<f", encoded)[0])).quantize(
+        CENT,
+        rounding=ROUND_HALF_UP,
+    )
+    if restored != normalized:
+        raise RegisterExportError(
+            f"El precio del producto ID {product_id} no puede representarse "
+            "con centavos exactos en el formato de la caja."
+        )
+    return encoded
+
+
+def _record(plu: int, price: bytes, name: bytes, barcode: bytes) -> bytes:
     name_field = name[:NAME_SIZE].ljust(NAME_SIZE, b" ") + b"\x00"
     barcode_field = barcode.ljust(BARCODE_SIZE, b" ") + b"\x00"
-    result = struct.pack("<Hf", plu, price) + name_field + barcode_field + TRAILER
+    result = struct.pack("<H", plu) + price + name_field + barcode_field + TRAILER
     if len(result) != RECORD_SIZE:
         raise AssertionError("El registro PRESUR1 no mide 58 bytes.")
     return result
@@ -96,15 +124,11 @@ def build_presur_file(products: Iterable[ExportableProduct]) -> bytes:
                 f"El producto ID {product.id} no tiene nombre."
             )
         name = _encode_text(name_value, "el nombre", product.id)
-        numeric_price = float(product.price)
-        if not math.isfinite(numeric_price) or numeric_price <= 0:
-            raise RegisterExportError(
-                f"El producto ID {product.id} tiene un precio inválido."
-            )
+        price = _register_price_bytes(product.price, product.id)
 
         plu = _assign_plu(product, used_plus)
         serialized.append(
-            (barcode, _record(plu, numeric_price, name, barcode))
+            (barcode, _record(plu, price, name, barcode))
         )
 
     # La referencia ordena los códigos de barras de mayor a menor.
@@ -113,7 +137,9 @@ def build_presur_file(products: Iterable[ExportableProduct]) -> bytes:
     placeholder_name = b"aaa"
     for plu in range(RECORD_COUNT):
         if plu not in used_plus:
-            records.append(_record(plu, 0.0, placeholder_name, b""))
+            records.append(
+                _record(plu, struct.pack("<f", 0.0), placeholder_name, b"")
+            )
 
     result = b"".join(records)
     expected_size = RECORD_COUNT * RECORD_SIZE
