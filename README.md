@@ -1,81 +1,229 @@
-# Gestión de inventario para supermercado
+# Sistema de inventario y precios para supermercado
 
 Aplicación web para administrar el catálogo de un supermercado, importar listas
-de precios, generar carteles de góndola y exportar productos al formato binario
-de la caja registradora. Incluye un frontend React instalable como PWA, una API
-FastAPI y persistencia en PostgreSQL.
+de precios sin degradar información existente, generar carteles de góndola y
+exportar el catálogo al formato binario `PRESUR1.DAT` utilizado por la caja.
 
-## Funcionalidades
+Este repositorio contiene una SPA React instalable como PWA, una API FastAPI y
+persistencia PostgreSQL. El proyecto pone especial énfasis en que un precio tenga
+el mismo valor al ingresarse, persistirse, mostrarse, imprimirse y exportarse.
 
-- Alta, edición, consulta y eliminación de productos.
-- Búsqueda por nombre o código de barras.
+> **Regla crítica del negocio:** una importación sólo puede aumentar el precio de
+> un producto existente. Para un barcode ya registrado no puede modificar nombre,
+> estado, peso, unidad ni fechas con datos del archivo. Una fila completa sólo se
+> carga cuando el barcode es nuevo.
+
+## Qué resuelve
+
+- Alta, consulta, edición y eliminación de productos.
+- Búsqueda manual o mediante cámara por código de barras.
 - Filtros por estado activo y estado de impresión.
-- Orden por nombre, precio o última actualización.
-- Importación masiva desde Excel o CSV.
+- Importación masiva desde `.xlsx` y `.csv`.
+- Comparación segura de precios durante una importación.
+- Historial auditable de altas y cambios de precio.
+- Protección frente a ediciones simultáneas y datos desactualizados.
+- Generación de carteles PDF A4, 24 por página (3 columnas por 8 filas).
+- Reimpresión determinista desde una copia inmutable del lote original.
+- Confirmación segura de carteles impresos.
 - Exportación de productos activos a `PRESUR1.DAT`.
-- Generación de carteles en PDF A4, 24 por página (matriz 3 × 8).
-- Seguimiento de carteles pendientes e impresos mediante versiones.
-- Confirmación segura de lotes: un producto modificado después de generar el PDF
-  no se marca por error como impreso.
-- Escaneo con cámara de códigos EAN-13, EAN-8, UPC-A, UPC-E y Code 128.
 - Interfaz responsive e instalable como PWA.
-- Shell básico disponible sin conexión; los datos requieren acceso a la API.
+
+## Reglas que no deben romperse
+
+Estas reglas son parte del dominio, no detalles de interfaz.
+
+### 1. El dinero es decimal exacto
+
+- PostgreSQL guarda `products.price` como `NUMERIC(12, 2)`.
+- Python usa `Decimal`; no se usa `float` para cálculos monetarios internos.
+- El frontend mantiene el precio como texto y compara centavos enteros; no lo
+  convierte a `Number`.
+- La API acepta formatos como `1234.56`, `1234,56`, `1.234,56` y `1,234.56`.
+- Se rechazan valores ambiguos, no finitos o con más de dos decimales.
+- La API serializa el precio como string decimal, por ejemplo `"1234.56"`.
+
+La implementación canónica está en:
+
+- Backend: `backend/app/money.py`.
+- Frontend: `src/utils/money.ts`.
+
+### 2. Una importación nunca reduce un precio
+
+Para cada barcode del archivo se consulta y bloquea el registro correspondiente
+antes de decidir. Todos los cambios se confirman juntos en una única transacción.
+
+| Situación | Resultado |
+| --- | --- |
+| El barcode no existe | Se crea el producto con todos los campos válidos del archivo. |
+| Precio importado mayor | Se actualiza únicamente `price`. |
+| Precio importado igual | No se modifica el producto. |
+| Precio importado menor | No se modifica el producto y el barcode se informa como preservado. |
+
+Ejemplo:
+
+```text
+Guardado 5300 + importado 7000 -> queda 7000
+Guardado 7000 + importado 6000 -> queda 7000
+Guardado 7000 + importado 7000 -> queda 7000 sin escritura
+```
+
+En productos existentes, los valores importados de `name`, `active`, `weight`,
+`weight_unit` y `last_updated` se ignoran siempre. Al aumentar el precio sólo
+cambian además metadatos internos necesarios para auditoría, concurrencia y
+estado del cartel.
+
+La política se aplica en el backend (`backend/app/api/products.py`), por lo que
+no depende de una casilla del frontend ni puede eludirse agregando parámetros a
+la petición HTTP.
+
+### 3. Las ediciones manuales detectan conflictos
+
+Cada producto tiene un número `revision`. Un `PUT /products/{id}` debe enviar
+`expected_revision`. El servidor bloquea la fila y devuelve HTTP `409` si otra
+operación la modificó desde que el usuario abrió el formulario. El usuario debe
+recargar y revisar el valor vigente antes de volver a guardar.
+
+Una edición manual sí puede bajar deliberadamente un precio. Esta posibilidad es
+distinta de la importación automática y requiere trabajar sobre la revisión
+vigente.
+
+### 4. Cada cambio de precio deja historial
+
+`product_price_changes` registra:
+
+- producto y barcode;
+- precio anterior y precio nuevo;
+- origen (`manual_create`, `manual_update`, `import_create` o `import_update`);
+- fecha del servidor.
+
+El historial se consulta con `GET /products/{id}/price-history`. Es prospectivo:
+no intenta reconstruir cambios ocurridos antes de que existiera esta tabla.
+
+### 5. Un lote de carteles conserva lo que se imprimió
+
+Al generar un PDF, cada elemento del lote guarda una copia de su posición,
+barcode, nombre, precio, peso y unidad. `GET /labels/batches/{id}/pdf` reconstruye
+el PDF desde esa copia, aunque el producto actual haya cambiado.
+
+Los lotes históricos creados antes de incorporar snapshots se rechazan con HTTP
+`409`, porque no es posible garantizar cuál era su contenido original.
+
+## Flujo funcional de punta a punta
+
+```text
+Formulario / Excel / CSV
+          |
+          v
+Validación de texto, barcode y Decimal
+          |
+          v
+Reglas de creación, edición o importación
+          |
+          v
+Transacción SQLAlchemy -> PostgreSQL NUMERIC(12,2)
+          |
+          +--> historial de precios
+          +--> nueva versión de cartel pendiente
+          |
+          v
+Respuesta API con precio decimal como string
+          |
+          +--> inventario React
+          +--> snapshot y PDF de carteles
+          +--> validación y exportación PRESUR1.DAT
+```
 
 ## Tecnologías
 
-| Capa | Tecnologías |
+| Capa | Tecnología |
 | --- | --- |
 | Frontend | React 19, TypeScript 6, Vite 8, React Compiler |
 | Escáner | ZXing Browser |
-| Backend | Python 3.13, FastAPI, SQLAlchemy, Pydantic |
-| Datos | PostgreSQL 17 |
-| Archivos | pandas, openpyxl, ReportLab, PyMuPDF |
-| Calidad | pytest, ESLint, TypeScript |
-| Infraestructura | Docker Compose local y Heroku para producción |
+| Backend | Python 3.13, FastAPI, SQLAlchemy 2, Pydantic 2 |
+| Persistencia | PostgreSQL 17 |
+| Importación | pandas y openpyxl |
+| Documentos | ReportLab, pypdf y PyMuPDF |
+| Calidad | pytest, Node Test Runner, ESLint y TypeScript |
+| Desarrollo local | Docker Compose para PostgreSQL |
 
-## Arquitectura
+## Estructura del repositorio
 
 ```text
-src/
-├── api/          Cliente HTTP del frontend
-├── components/   Componentes visuales y modales
-├── hooks/        Estado y operaciones del inventario
-├── types/        Contratos TypeScript
-└── utils/        Formateadores y utilidades
-
-backend/
-├── app/
-│   ├── api/      Endpoints de productos y carteles
-│   ├── models/   Modelos SQLAlchemy
-│   ├── schemas/  Validación de entrada y salida
-│   └── services/ Importación, PDF, etiquetas y exportación PRESUR
-├── migrations/   SQL de referencia para instalaciones existentes
-├── scripts/      Herramientas de desarrollo para PDFs
-└── tests/        Pruebas automatizadas
+supermercado/
+|-- src/
+|   |-- api/                 cliente HTTP y descargas
+|   |-- components/          tabla, filtros, modales, preview y escáner
+|   |-- hooks/               estado y operaciones de inventario
+|   |-- types/               contratos TypeScript
+|   `-- utils/               dinero, formato y descripción de PRESUR
+|-- public/                  manifest, service worker e iconos PWA
+|-- tests/                   pruebas unitarias del frontend
+|-- backend/
+|   |-- app/
+|   |   |-- api/             controladores de productos y carteles
+|   |   |-- models/          modelos SQLAlchemy
+|   |   |-- schemas/         DTO y validación Pydantic
+|   |   |-- services/        importación, PDF, estado y PRESUR
+|   |   |-- database.py      engine, sesiones e inicialización del esquema
+|   |   |-- main.py          composition root de FastAPI
+|   |   `-- money.py         parser monetario canónico
+|   |-- migrations/          SQL aditivo para instalaciones existentes
+|   |-- scripts/             auditorías y verificaciones operativas
+|   `-- tests/               pruebas backend e integración con SQLite
+|-- output/pdf/              PDFs de muestra y trazabilidad
+|-- docker-compose.yml       PostgreSQL local
+`-- vite.config.ts           build y proxy `/api`
 ```
 
-El frontend consume `/api` durante el desarrollo. Vite redirige esas solicitudes
-a `http://127.0.0.1:8000` y elimina el prefijo. En producción,
-`VITE_API_URL` apunta directamente a la URL HTTPS de FastAPI.
+## Modelo de datos
 
-## Requisitos
+### `products`
 
-- Node.js 24 y npm.
+| Campo | Función |
+| --- | --- |
+| `id` | Identidad interna y candidato a PLU. |
+| `barcode` | Identificador único del producto. |
+| `name` | Nombre visible y exportable. |
+| `price` | `NUMERIC(12,2)`, positivo y exacto. |
+| `weight`, `weight_unit` | Presentación opcional: `g`, `kg`, `ml`, `l` o `u`. |
+| `active` | Determina si se exporta a la caja. |
+| `revision` | Control optimista para evitar escrituras obsoletas. |
+| `label_version` | Versión vigente de los datos visibles en el cartel. |
+| `printed_label_version` | Versión confirmada como impresa. |
+| `printed_at` | Fecha de confirmación del cartel vigente. |
+| `last_updated` | Fecha administrada por el servidor. |
+
+`printed` no es una columna: es verdadero cuando existe `printed_at` y
+`printed_label_version == label_version`.
+
+### `product_price_changes`
+
+Historial append-only de precios. Conserva el barcode además del `product_id`
+para que el evento siga siendo interpretable si el producto se elimina.
+
+### `print_batches` y `print_batch_items`
+
+Representan una generación de carteles y los productos incluidos. Cada item
+guarda la versión visible y el snapshot inmutable usado para crear el PDF.
+
+## Instalación local
+
+### Requisitos
+
+- Node.js compatible con Vite 8; el proyecto fue validado con Node.js 24.
 - Python 3.13.
-- Docker con soporte para Compose, o una instancia PostgreSQL 17 accesible.
-- PowerShell para los comandos de esta guía en Windows.
-
-## Instalación local en Windows
+- Docker con Compose, o PostgreSQL accesible por una URL de conexión.
+- PowerShell para ejecutar los ejemplos de Windows.
 
 ### 1. Instalar el frontend
 
-Desde la raíz del repositorio:
+Desde la raíz:
 
 ```powershell
 npm ci
 ```
 
-### 2. Crear el entorno de Python
+### 2. Crear el entorno del backend
 
 ```powershell
 cd backend
@@ -84,38 +232,35 @@ py -3.13 -m venv .venv
 cd ..
 ```
 
-### 3. Configurar las variables locales
+### 3. Configurar variables
 
 ```powershell
 Copy-Item backend\.env.example backend\.env
 ```
 
-La configuración incluida usa PostgreSQL en `localhost:5433`, base
-`supermercado`, usuario `admin` y contraseña de desarrollo `desarrollo`. El
-archivo `backend/.env` es local y está ignorado por Git.
+El ejemplo usa PostgreSQL en `localhost:5433`, base `supermercado`, usuario
+`admin` y contraseña local `desarrollo`. `backend/.env` no debe versionarse ni
+contener credenciales de producción.
 
 ### 4. Levantar PostgreSQL
 
 ```powershell
 docker compose up -d database
+docker compose ps
 ```
 
-El volumen `postgres_data` conserva la información cuando el contenedor se
-reinicia o recrea.
+El volumen `postgres_data` conserva la base al reiniciar o recrear el contenedor.
 
-### 5. Iniciar la API
-
-En una terminal:
+### 5. Iniciar FastAPI
 
 ```powershell
 cd backend
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Se puede agregar `--reload` durante el desarrollo si el recargador funciona de
-manera estable en el entorno local.
+Para desarrollo puede agregarse `--reload`.
 
-### 6. Iniciar el frontend
+### 6. Iniciar React
 
 En otra terminal, desde la raíz:
 
@@ -131,174 +276,190 @@ Abrir `http://localhost:5173`.
 | --- | --- |
 | Aplicación | `http://localhost:5173` |
 | API | `http://127.0.0.1:8000` |
-| Documentación Swagger | `http://127.0.0.1:8000/docs` |
-| Esquema OpenAPI | `http://127.0.0.1:8000/openapi.json` |
+| Swagger | `http://127.0.0.1:8000/docs` |
+| OpenAPI | `http://127.0.0.1:8000/openapi.json` |
 | Health check | `http://127.0.0.1:8000/health` |
 | PostgreSQL | `localhost:5433` |
 
+Vite recibe `/api/*`, lo redirige a `http://127.0.0.1:8000/*` y elimina el
+prefijo. En un build desplegado, `VITE_API_URL` debe apuntar a la API pública; si
+no se define, el frontend utiliza `/api`.
+
 ## Variables de entorno
 
-| Variable | Servicio | Descripción | Valor local predeterminado |
-| --- | --- | --- | --- |
-| `DATABASE_URL` | Backend | URL completa de conexión PostgreSQL | `postgresql://admin:desarrollo@localhost:5433/supermercado` |
-| `ALLOWED_ORIGINS` | Backend | Orígenes CORS separados por comas | `http://localhost:5173,http://127.0.0.1:5173` |
-| `VITE_API_URL` | Frontend | URL pública de la API usada durante el build | `/api` cuando no se define |
+| Variable | Servicio | Uso |
+| --- | --- | --- |
+| `DATABASE_URL` | Backend | URL SQLAlchemy completa. Es obligatoria. |
+| `ALLOWED_ORIGINS` | Backend | Lista CORS separada por comas. |
+| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | Referencia local | Alternativa documentada en `.env.example`; el código actual requiere `DATABASE_URL`. |
+| `VITE_API_URL` | Frontend/build | URL base de FastAPI; valor implícito `/api`. |
 
-No se deben guardar credenciales reales en el repositorio. En Heroku, estas
-variables deben configurarse como Config Vars de las aplicaciones.
-
-## Modelo de producto
-
-| Campo | Descripción |
-| --- | --- |
-| `barcode` | Código único. Para la caja admite hasta 15 bytes CP1252. |
-| `name` | Nombre. Para la caja admite hasta 18 bytes CP1252. |
-| `price` | Precio mayor que cero. |
-| `weight` | Contenido opcional, mayor que cero. |
-| `weight_unit` | `g`, `kg`, `ml`, `l` o `u`; debe acompañar a `weight`. |
-| `active` | Determina si el producto se exporta a la caja. |
-| `last_updated` | Fecha del servidor o tomada de una importación. |
-| `label_version` | Versión de los datos visibles en el cartel. |
-| `printed` | Indica si la versión vigente fue confirmada como impresa. |
-
-Cambiar código, nombre, precio, peso o unidad incrementa la versión visible y
-devuelve el cartel al estado pendiente.
+No hay autenticación ni autorización implementadas en el código fuente actual.
+CORS no reemplaza esos controles. No debe exponerse la aplicación públicamente
+sin agregar autenticación, HTTPS, gestión de secretos y una política de acceso.
 
 ## Importación de productos
 
-La interfaz procesa archivos `.xlsx` y `.csv`. Los archivos `.xls` antiguos
-deben convertirse primero a `.xlsx`. Las columnas de nombre y precio son
-obligatorias.
+La interfaz admite `.xlsx` y `.csv`. Los `.xls` antiguos deben convertirse a
+`.xlsx`. `name` y `price` son columnas obligatorias para validar una fila; una
+fila sin barcode se informa como omitida.
 
 | Dato | Encabezados reconocidos |
 | --- | --- |
-| Código | `barcode`, `codigo`, `codigo de barras`, `codigobarras` |
+| Barcode | `barcode`, `codigo`, `codigo de barras`, `codigobarras` |
 | Nombre | `name`, `nombre`, `producto`, `descripcion` |
 | Precio | `price`, `precio`, `valor`, `importe` |
 | Peso | `weight`, `peso`, `contenido`, `cantidad` |
 | Unidad | `weightunit`, `unidad`, `unidadmedida`, `unidadpeso` |
-| Actualización | `lastupdated`, `fecha`, `ultimaactualizacion` |
+| Fecha | `lastupdated`, `fecha`, `ultimaactualizacion` |
 
-Ejemplo CSV:
+Ejemplo:
 
 ```csv
 codigo,nombre,precio,peso,unidad,fecha
-7790001000011,Arroz largo fino,1850.50,1,kg,28/08/2026
-7790001000028,Gaseosa cola,2400,1.5,l,28/08/2026
-7790001000035,Jabón blanco,950,200,g,28/08/2026
+7790001000011,Arroz largo fino,"1.850,50",1,kg,04/09/2026
+7790001000028,Gaseosa cola,2400,1.5,l,04/09/2026
+7790001000035,Jabón blanco,950,200,g,04/09/2026
 ```
 
-Reglas relevantes:
+Detalles relevantes:
 
-- Las filas sin nombre o con precio inválido se omiten.
-- Las filas sin código se informan como omitidas y no se guardan.
-- Si un código ya existe, el producto se actualiza.
-- Si el archivo repite un código, prevalece la última fila.
-- Un peso puede escribirse como `500 g`, `1,5 l` o separarse en dos columnas.
-- Los códigos numéricos se conservan sin agregar `.0`.
+- Si el archivo repite un barcode, prevalece la última fila de ese archivo.
+- Los barcodes numéricos se normalizan sin agregar `.0`.
+- El peso puede escribirse como `500 g`, `1,5 l` o en columnas separadas.
+- Para un producto nuevo se validan y cargan todos los campos disponibles.
+- Para uno existente sólo se evalúa si el precio es mayor; ningún otro dato del
+  archivo se copia.
+- La selección de existentes se realiza con bloqueo de fila para evitar carreras
+  entre importaciones concurrentes.
+- La respuesta informa nuevos, existentes encontrados, precios aumentados,
+  barcodes cuyo precio menor fue preservado y filas omitidas sin barcode.
+
+## Edición manual
+
+El frontend abre un producto con su `revision` actual. Al guardar, incluye esa
+revisión como `expected_revision`. Un conflicto HTTP `409` significa que el
+producto cambió entretanto y que debe recargarse antes de decidir qué valor
+conservar.
+
+Modificar barcode, nombre, precio, peso o unidad incrementa `label_version` y
+devuelve el cartel al estado pendiente. Cambiar el precio agrega además una fila
+al historial.
 
 ## Carteles de precios
 
-Los carteles se generan en PDF A4 vertical, en una matriz fija de 3 columnas por
-8 filas. Cada cartel puede incluir nombre, precio, presentación, precio
-comparable y código de barras.
+El PDF usa A4 vertical y una matriz fija de 3 × 8. Puede mostrar nombre, precio,
+presentación, precio comparable y código de barras EAN-13, EAN-8, UPC-A, UPC-E o
+Code 128 cuando el valor es representable.
 
-Flujo recomendado:
+Flujo operativo recomendado:
 
-1. Filtrar o seleccionar productos pendientes.
-2. Elegir **Generar carteles**.
-3. Revisar la vista previa del PDF.
-4. Imprimir el documento.
-5. Confirmar el lote sólo después de imprimirlo.
+1. Seleccionar productos pendientes.
+2. Generar el PDF.
+3. Revisar visualmente el documento.
+4. Imprimir.
+5. Confirmar el lote sólo después de que la impresión física termine.
 
-La confirmación compara la versión incluida en el PDF con la versión actual del
-producto. Los productos modificados o eliminados después de generar el lote no
-se marcan como impresos. Los códigos no representables se omiten y se muestran
-como advertencias.
+La generación bloquea los productos, toma snapshots y persiste el lote. La
+confirmación compara `label_version` contra la versión capturada: los productos
+modificados o eliminados posteriormente se informan y no se marcan por error
+como impresos.
 
-## Exportación a la caja
+## Exportación `PRESUR1.DAT`
 
-**Exportar caja** descarga `PRESUR1.DAT` con los productos activos. El formato
-contiene 20.000 registros binarios de 58 bytes y asigna una posición PLU a cada
-producto.
+Se exportan únicamente productos activos. El archivo contiene exactamente
+20.000 registros de 58 bytes (`1.160.000` bytes en total).
 
-Restricciones principales:
+Restricciones:
 
 - Máximo de 20.000 productos activos.
-- Código de hasta 15 bytes y nombre de hasta 18 bytes en CP1252.
-- Precio finito y mayor que cero.
-- No se admiten caracteres de control.
-- El peso se usa en carteles, pero no forma parte de `PRESUR1.DAT`.
+- Barcode de hasta 15 bytes CP1252.
+- Nombre validado para la caja y campo binario de 18 bytes CP1252.
+- Sin caracteres de control ni caracteres incompatibles con CP1252.
+- Precio positivo y representable como `float32` sin alterar sus centavos.
+- IDs entre `0` y `19999` se usan como PLU si están libres; los demás reciben un
+  hueco disponible.
+- El peso se utiliza en carteles, pero no forma parte de este formato.
 
-La exportación se rechaza con un mensaje explícito si un producto activo no
-puede representarse sin corromper el archivo.
+La exportación falla completa y explícitamente si algún producto activo no puede
+representarse sin pérdida. No se genera un archivo parcialmente corrupto.
 
 ## Escáner y PWA
 
-El botón **Escanear** abre la cámara. Si el código existe, abre el producto para
-editarlo; si no existe, permite crearlo con el código precargado.
+El escáner busca EAN-13, EAN-8, UPC-A, UPC-E y Code 128. Si encuentra el barcode,
+abre el producto; si no existe, abre el alta con el código precargado.
 
-Los navegadores sólo habilitan la cámara en contextos seguros:
+La cámara requiere un contexto seguro:
 
-- `http://localhost` funciona para pruebas en la misma computadora.
-- Una IP local mediante HTTP permite abrir la aplicación, pero no usar la cámara.
-- En celulares se debe usar un dominio HTTPS o un túnel HTTPS temporal.
+- `http://localhost` funciona en la misma computadora.
+- Una IP local servida por HTTP normalmente no habilita la cámara.
+- En teléfonos debe utilizarse HTTPS.
 
-Ejemplo con Cloudflare Tunnel:
-
-```powershell
-$env:__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS=".trycloudflare.com"
-npm run dev
-```
-
-En otra terminal:
-
-```powershell
-cloudflared tunnel --url http://localhost:5173
-```
-
-El túnel expone temporalmente la aplicación a Internet. Debe cerrarse al terminar
-la prueba y no sustituye autenticación ni controles de acceso.
-
-Para regenerar los íconos de la PWA:
+Para regenerar los iconos:
 
 ```powershell
 .\scripts\generate-pwa-icons.ps1
 ```
 
+El service worker ofrece el shell básico sin conexión. Los datos del inventario
+siguen requiriendo acceso a la API y a PostgreSQL.
+
 ## API HTTP
 
-Las rutas siguientes se exponen directamente en FastAPI. El prefijo `/api` sólo
-existe en el proxy local de Vite.
+Las rutas de FastAPI no llevan `/api`; ese prefijo sólo pertenece al proxy de
+Vite.
 
-| Método | Ruta | Uso |
+| Método | Ruta | Función |
 | --- | --- | --- |
-| `GET` | `/health` | Health check del servicio |
-| `GET` | `/products` | Listar productos con paginación y filtro de impresión |
-| `POST` | `/products` | Crear un producto |
-| `GET` | `/products/by-barcode` | Buscar por código exacto |
-| `GET` | `/products/{id}` | Consultar un producto |
-| `PUT` | `/products/{id}` | Actualizar un producto |
-| `DELETE` | `/products/{id}` | Eliminar un producto |
-| `POST` | `/products/import` | Importar Excel o CSV |
-| `GET` | `/products/export/register` | Descargar `PRESUR1.DAT` |
-| `GET` | `/labels/pending-count` | Contar carteles pendientes |
-| `PUT` | `/labels/status` | Marcar productos impresos o pendientes |
-| `POST` | `/labels/generate` | Generar un lote PDF |
-| `POST` | `/labels/batches/{id}/confirm` | Confirmar un lote impreso |
+| `GET` | `/health` | Disponibilidad del backend. |
+| `GET` | `/products` | Lista paginada; acepta `skip`, `limit` y `print_status`. |
+| `POST` | `/products` | Crea un producto y su primer evento de precio. |
+| `GET` | `/products/by-barcode?barcode=...` | Busca el barcode textual exacto. |
+| `GET` | `/products/{id}` | Obtiene un producto. |
+| `GET` | `/products/{id}/price-history` | Devuelve el historial de precios. |
+| `PUT` | `/products/{id}` | Edición manual con `expected_revision`. |
+| `DELETE` | `/products/{id}` | Elimina un producto. |
+| `POST` | `/products/import` | Importa Excel o CSV con política increase-only. |
+| `GET` | `/products/export/register` | Descarga `PRESUR1.DAT`. |
+| `GET` | `/labels/pending-count` | Cuenta carteles pendientes. |
+| `PUT` | `/labels/status` | Marca productos impresos o pendientes. |
+| `POST` | `/labels/generate` | Genera PDF y lote inmutable. |
+| `GET` | `/labels/batches/{id}/pdf` | Reimprime desde el snapshot. |
+| `POST` | `/labels/batches/{id}/confirm` | Confirma las versiones aún vigentes. |
 
-Los contratos completos y ejemplos interactivos están disponibles en `/docs`.
+Los contratos ejecutables y ejemplos están en `/docs` y `/openapi.json`.
 
-## Base de datos y esquema
+## Base de datos y migraciones
 
-Al iniciar, la API crea las tablas faltantes y adapta instalaciones anteriores
-de manera idempotente mediante `initialize_database()`. El archivo
-`backend/migrations/20260827_add_label_printing.sql` conserva la migración SQL de
-referencia para las tablas y columnas de impresión.
+Al importar `app.main`, `initialize_database()` crea tablas faltantes y agrega de
+forma idempotente columnas necesarias para instalaciones anteriores. Esta
+estrategia facilita una instalación única; no sustituye un sistema de migraciones
+coordinadas cuando existen varios servidores desplegando en paralelo.
 
-Para proyectos con múltiples entornos o despliegues concurrentes conviene
-convertir estas adaptaciones en migraciones Alembic versionadas antes de ampliar
-el esquema.
+Migraciones de referencia:
+
+- `backend/migrations/20260827_add_label_printing.sql`: versiones y lotes.
+- `backend/migrations/20260904_price_integrity.sql`: revisión, snapshots e
+  historial de precios.
+
+Para aplicar y verificar el esquema de integridad sin modificar precios:
+
+```powershell
+cd backend
+$env:PYTHONPATH="."
+.\.venv\Scripts\python.exe scripts\apply_price_integrity_schema.py
+```
+
+El script toma antes y después la cantidad, suma y fingerprint de los precios y
+falla si alguno cambia.
+
+Antes de cualquier cambio masivo o despliegue:
+
+1. Crear un backup de PostgreSQL.
+2. Verificar que el backup pueda restaurarse.
+3. Ejecutar la migración en un entorno de prueba.
+4. Ejecutar las suites automatizadas.
+5. Recién entonces desplegar.
 
 ## Pruebas y calidad
 
@@ -307,74 +468,128 @@ Frontend, desde la raíz:
 ```powershell
 npm run lint
 npm run build
+npm run test:frontend
 ```
 
 Backend:
 
 ```powershell
 cd backend
+$env:PYTHONPATH="."
 .\.venv\Scripts\python.exe -m pytest tests -q
 ```
 
-La suite cubre validación, importación, códigos de barras, generación de PDFs,
-estado y confirmación de lotes, y exportación para la caja.
+La línea base al documentar este estado es de 51 pruebas backend y 3 pruebas
+frontend. Se cubren dinero decimal, importación, preservación de campos,
+concurrencia, historial, barcode, PDFs, snapshots, confirmación de lotes y
+exportación binaria.
 
-## Herramientas de desarrollo
+## Scripts de diagnóstico
 
-Generar un PDF de muestra:
+Ejecutar desde `backend` con `PYTHONPATH=.`:
 
-```powershell
-cd backend
-.\.venv\Scripts\python.exe scripts\generate_sample_labels.py ..\output\pdf\carteles_muestra.pdf
-```
-
-Renderizar sus páginas como PNG:
-
-```powershell
-.\.venv\Scripts\python.exe scripts\render_pdf_pages.py ..\output\pdf\carteles_muestra.pdf ..\output\pdf\rendered
-```
-
-## Seguridad y operación
-
-- CORS limita qué frontend puede llamar a la API desde un navegador.
-- HTTPS es obligatorio en producción para proteger datos y habilitar la cámara.
-- CORS no reemplaza autenticación ni autorización.
-- La aplicación todavía no implementa usuarios, inicio de sesión ni roles.
-- No se debe publicar para acceso irrestricto hasta agregar autenticación.
-- Para producción deben configurarse y comprobarse backups periódicos.
-- Antes de modificar masivamente el catálogo conviene generar un respaldo y
-  verificar que pueda restaurarse.
+| Script | Propósito | ¿Escribe datos? |
+| --- | --- | --- |
+| `scripts/audit_price_database.py` | Inspecciona tipo de columna, tablas, vistas, triggers y rules. | No. |
+| `scripts/apply_price_integrity_schema.py` | Aplica esquema aditivo y comprueba que ningún precio cambie. | Sólo esquema. |
+| `scripts/trace_price_transaction.py` | Traza un decimal por API y DB. | Inserta temporalmente y revierte. |
+| `scripts/verify_business_price_flow.py` | Verifica 5300 → 7000 y rechazo de 6000, campos intactos y reimpresión. | Inserta temporalmente y revierte. |
+| `scripts/generate_sample_labels.py` | Genera un PDF de muestra. | Sólo archivo de salida. |
+| `scripts/render_pdf_pages.py` | Renderiza un PDF a PNG para inspección visual. | Sólo archivos de salida. |
+| `scripts/generate_price_trace_pdf.py` | Genera casos visuales de precisión monetaria. | Sólo archivo de salida. |
 
 ## Solución de problemas
 
 ### El inventario queda cargando
 
-1. Comprobar la API:
+1. Ejecutar `Invoke-WebRequest http://127.0.0.1:8000/health`.
+2. Confirmar que `backend/.env` contiene una `DATABASE_URL` correcta.
+3. Ejecutar `docker compose ps` y revisar PostgreSQL.
+4. Verificar que los puertos `5173`, `8000` y `5433` estén libres.
+5. Revisar la consola del backend antes de reiniciar procesos.
 
-   ```powershell
-   Invoke-WebRequest http://127.0.0.1:8000/health
-   ```
+### Una importación no cambió un producto
 
-2. Verificar que `backend/.env` exista y que `DATABASE_URL` sea correcto.
-3. Confirmar que PostgreSQL esté disponible con `docker compose ps`.
-4. Revisar que los puertos `5173`, `8000` y `5433` no estén ocupados por
-   procesos antiguos.
-5. Reiniciar la API y usar el botón de actualización del inventario.
+- Confirmar que el barcode coincide exactamente.
+- Si el producto ya existe, sólo cambiará cuando el precio importado sea mayor.
+- El resto de los campos del archivo se ignora intencionalmente.
+- Revisar `price_updated_count`, `preserved_price_barcodes` y
+  `skipped_barcodes` en la respuesta.
 
-### La cámara no aparece
+### Una edición devuelve HTTP 409
 
-- Usar `localhost` o HTTPS.
-- Conceder permiso de cámara al navegador.
-- Cerrar otras aplicaciones que estén usando la cámara.
-- Probar con la cámara trasera en un teléfono compatible.
-
-### La exportación de caja falla
-
-Revisar el producto indicado por el mensaje: normalmente tiene un nombre o
-código demasiado largo, un carácter incompatible con CP1252 o un precio
-inválido.
+Otra operación cambió el producto. Recargarlo, revisar especialmente el precio y
+volver a guardar utilizando la nueva revisión.
 
 ### Un cartel vuelve a pendiente
 
-Es el comportamiento esperado cuando cambia un dato visible. Se debe generar e
-imprimir una nueva versión del cartel.
+Es esperado cuando cambia barcode, nombre, precio, peso o unidad. Debe generarse
+y confirmarse una nueva versión.
+
+### Un lote antiguo no puede reimprimirse
+
+Los lotes previos a los snapshots no conservan suficiente información. El
+servidor devuelve HTTP 409 en vez de generar un PDF potencialmente incorrecto.
+
+### La exportación de caja falla
+
+El mensaje identifica el producto que no puede representarse. Revisar longitud y
+codificación de nombre/barcode, caracteres de control y representación exacta
+del precio.
+
+### La cámara no aparece
+
+Usar `localhost` o HTTPS, conceder permiso al navegador y cerrar otras
+aplicaciones que estén utilizando la cámara.
+
+## Guía de contexto para personas y agentes de IA
+
+La siguiente ficha resume las decisiones que deben conocerse antes de modificar
+el proyecto:
+
+```yaml
+project:
+  purpose: inventario, precios, carteles PDF y exportación PRESUR1
+  language_ui: es-AR
+  frontend: React + TypeScript + Vite
+  backend: FastAPI + SQLAlchemy + Pydantic
+  database: PostgreSQL
+
+source_of_truth:
+  persisted_products: PostgreSQL products
+  money_parser_backend: backend/app/money.py
+  money_parser_frontend: src/utils/money.ts
+  import_policy: backend/app/api/products.py::import_products
+  label_rendering: backend/app/services/label_pdf.py
+  register_serialization: backend/app/services/register_export.py
+
+hard_invariants:
+  - prices remain exact to two decimal places end-to-end
+  - an import never lowers an existing price
+  - an import updates only price for an existing barcode
+  - full imported rows are used only for new barcodes
+  - manual updates require the current expected_revision
+  - every persisted price change creates an audit event
+  - generated label batches retain immutable printable snapshots
+  - batch confirmation never marks a newer product version as printed
+  - PRESUR export fails rather than silently losing cents or corrupting text
+
+safe_change_protocol:
+  - preserve Decimal/string money handling; do not introduce float/Number
+  - enforce business rules in the backend, not only in React
+  - keep imports transactional and row-locked
+  - add regression tests for higher, equal and lower imported prices
+  - test that non-price fields remain unchanged for existing barcodes
+  - run backend tests, frontend tests, lint and build
+  - use the rollback verification scripts for database-sensitive changes
+
+known_boundaries:
+  - authentication and authorization are not implemented
+  - offline mode caches the UI shell, not inventory data
+  - legacy print batches without snapshots cannot be faithfully reconstructed
+  - price history begins when auditing was introduced
+```
+
+Cuando una modificación contradiga una regla de `hard_invariants`, debe tratarse
+como un cambio explícito de política de negocio: requiere confirmación, pruebas y
+actualización de este README.
