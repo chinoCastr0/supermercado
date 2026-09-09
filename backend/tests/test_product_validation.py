@@ -1,3 +1,4 @@
+"""Validación Pydantic del alta y actualización; no ejercita transporte HTTP."""
 import pytest
 from pydantic import ValidationError
 
@@ -56,3 +57,34 @@ def test_weight_requires_supported_unit() -> None:
 
     with pytest.raises(ValidationError, match="deben informarse juntos"):
         ProductUpdate(expected_revision=1, weight=500)
+
+
+def test_weight_rejects_more_than_two_decimal_places() -> None:
+    """Regresión A03: 0.001 no debe truncarse en silencio a 0.00 al persistir."""
+    with pytest.raises(ValidationError, match="2 decimal"):
+        ProductCreate(
+            barcode="7791234567890",
+            name="Producto",
+            price=100,
+            weight="0.001",
+            weight_unit="kg",
+        )
+
+
+@pytest.mark.parametrize("field", ["barcode", "name", "price", "active"])
+def test_update_rejects_explicit_null_on_required_fields(field: str) -> None:
+    """Regresión A08: un null explícito no debe llegar a un IntegrityError genérico."""
+    with pytest.raises(ValidationError, match="no puede ser nulo"):
+        ProductUpdate(expected_revision=1, **{field: None})
+
+
+def test_create_trims_surrounding_whitespace_from_barcode_and_name() -> None:
+    """Regresión A09: evita que ' 001 ' y '001' coexistan como productos distintos."""
+    product = ProductCreate(
+        barcode="  7791234567890  ",
+        name="  Café molido  ",
+        price=100,
+    )
+
+    assert product.barcode == "7791234567890"
+    assert product.name == "Café molido"

@@ -1,9 +1,7 @@
-"""Paquete de servicios y adaptadores de la aplicación.
+"""Exportaciones públicas del paquete de servicios.
 
-IMPORTANCIA: crea una frontera para lógica que no pertenece a HTTP ni al ORM.
-PATRÓN / SOLID: Package Facade y SRP; expone una entrada estable al paquete.
-SOLUCIÓN ESPECÍFICA: el adaptador Excel es hoy el único servicio publicado.
-"""
+Importar este paquete carga el parser y pandas; los otros servicios se importan
+por su módulo concreto. Esta fachada no constituye una interfaz de repositorio."""
 
 from app.services.excel_import import parse_excel_rows
 

@@ -17,11 +17,14 @@ from app.schemas.product import LabelGenerationRequest, ProductCreate
 
 
 def pdf_text(content: bytes) -> str:
+    """Extrae texto del PDF generado para comprobar precios visibles."""
     return "\n".join(
         page.extract_text() or "" for page in PdfReader(BytesIO(content)).pages
     )
 
 
+# El rollback elimina las filas de prueba; no revierte valores de secuencias.
+# Las comprobaciones impresas son diagnóstico y no sustituyen asserts de CI.
 barcode = f"BIZ{uuid4().hex[:12]}"
 with engine.connect() as connection:
     outer_transaction = connection.begin()

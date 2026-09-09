@@ -29,6 +29,7 @@ def _products_in_requested_order(
     *,
     lock: bool = False,
 ) -> list[Product]:
+    """Deduplica IDs y restaura su orden; lock mantiene filas bloqueadas hasta commit."""
     unique_ids = list(dict.fromkeys(product_ids))
     statement = select(Product).where(Product.id.in_(unique_ids))
     if lock:
@@ -46,6 +47,7 @@ def _products_in_requested_order(
 
 @router.get("/pending-count")
 def pending_count(db: Session = Depends(get_db)) -> dict[str, int]:
+    """Cuenta carteles cuya versión vigente aún no tiene confirmación."""
     count = db.scalar(
         select(func.count(Product.id)).where(
             or_(
@@ -63,6 +65,7 @@ def set_print_status(
     payload: ProductPrintStatusUpdate,
     db: Session = Depends(get_db),
 ) -> PrintStatusResponse:
+    """Marca el estado leído del catálogo; no recibe la versión vista por el usuario."""
     products = _products_in_requested_order(db, payload.product_ids)
     now = datetime.now(timezone.utc)
     for product in products:
@@ -85,6 +88,7 @@ def generate_labels(
     payload: LabelGenerationRequest,
     db: Session = Depends(get_db),
 ) -> Response:
+    """Genera PDF bajo bloqueo y persiste un snapshot de cada cartel válido."""
     products = _products_in_requested_order(db, payload.product_ids, lock=True)
     snapshots = [
         LabelProductSnapshot(
@@ -159,6 +163,7 @@ def reprint_batch_pdf(
     batch_id: str,
     db: Session = Depends(get_db),
 ) -> Response:
+    """Reconstruye desde snapshots; rechaza lotes históricos incompletos."""
     batch = db.get(PrintBatch, batch_id)
     if batch is None:
         raise HTTPException(
@@ -221,6 +226,7 @@ def confirm_batch(
     batch_id: str,
     db: Session = Depends(get_db),
 ) -> BatchConfirmationResponse:
+    """Compara versiones y confirma coincidencias; actualmente lee sin bloqueo de filas."""
     batch = db.get(PrintBatch, batch_id)
     if batch is None:
         raise HTTPException(

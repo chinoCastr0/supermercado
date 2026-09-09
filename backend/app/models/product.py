@@ -1,11 +1,8 @@
-"""Modelo persistente del producto.
+"""Mapeo SQLAlchemy del catálogo.
 
-IMPORTANCIA: mapea la entidad Product a la tabla `products`.
-PATRÓN / SOLID: SQLAlchemy implementa Data Mapper; este archivo aplica SRP al
-describir persistencia sin ocuparse de HTTP, formularios o archivos Excel.
-SOLUCIÓN ESPECÍFICA: tamaños, precisión monetaria, unicidad y fecha automática
-son reglas concretas del inventario, no patrones de diseño.
-"""
+revision protege ediciones que verifican expected_revision; label_version cambia
+cuando cambia el contenido visible. La positividad y compatibilidad con caja se
+validan fuera de este modelo: Numeric fija precisión, no reglas de negocio."""
 
 from datetime import datetime, timezone
 from decimal import Decimal

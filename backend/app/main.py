@@ -1,12 +1,7 @@
-"""Punto de entrada y composición de la API.
+"""Composición de FastAPI: rutas, CORS y disponibilidad del proceso.
 
-IMPORTANCIA: crea FastAPI, conecta infraestructura, rutas y middleware.
-PATRÓN: Composition Root; las piezas se ensamblan aquí. Esto favorece SRP porque
-los endpoints y la base no se configuran dentro de sus propias implementaciones.
-SOLUCIÓN ESPECÍFICA: nombre de la API, CORS configurable y health check.
-NOTA DIDÁCTICA: no hay una jerarquía de subtipos del dominio donde demostrar LSP;
-los DTOs separados corresponden a ISP, no a herencia polimórfica.
-"""
+Importar este módulo ejecuta initialize_database; el arranque tiene efectos DDL.
+No hay autenticación en estas rutas. El health check no consulta PostgreSQL."""
 
 import os
 
@@ -61,6 +56,7 @@ app.include_router(labels_router)
 
 @app.get("/")
 def root() -> dict[str, str]:
+    """Devuelve un mensaje informativo; no comprueba acceso a la base."""
     return {
         "message": "API del supermercado funcionando",
     }

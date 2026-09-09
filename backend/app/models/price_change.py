@@ -1,4 +1,8 @@
-"""Immutable audit trail for every persisted product price change."""
+"""Historial de precios escrito junto con cada cambio del catálogo.
+
+El código lo utiliza de forma append-only, pero la base no impide UPDATE/DELETE.
+product_id carece intencionalmente de FK al catálogo para sobrevivir al borrado.
+source identifica la operación, no al usuario que la ejecutó."""
 
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -10,7 +14,7 @@ from app.database import Base
 
 
 class ProductPriceChange(Base):
-    """Records who/what changed a price without rewriting prior entries."""
+    """Registra importes y origen operativo; todavía no identifica al actor."""
 
     __tablename__ = "product_price_changes"
 

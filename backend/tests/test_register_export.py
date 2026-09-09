@@ -1,3 +1,4 @@
+"""Formato binario PRESUR: longitudes, orden, CP1252 y conservación de centavos."""
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP

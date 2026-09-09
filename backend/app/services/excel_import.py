@@ -1,14 +1,14 @@
-"""Adaptador que transforma archivos tabulares en datos del dominio.
+"""Adaptador pandas para leer CSV/XLSX y normalizar columnas, dinero y medidas.
 
-IMPORTANCIA: aísla pandas, Excel/CSV y sus formatos irregulares del controlador.
-PATRÓN / SOLID: es un Adapter de entrada y aplica SRP. Las funciones de coerción
-son pequeñas y puras, por lo que pueden probarse o reemplazarse aisladamente.
-SOLUCIÓN ESPECÍFICA: alias de columnas, fechas `dayfirst` y filas inválidas.
-La rama CSV/Excel es un condicional simple, no una implementación de Strategy.
-"""
+Devuelve diccionarios, no ProductCreate: no aplica todos los límites del alta
+manual. Las filas sin nombre o precio válido se reportan como descartadas en
+``ParsedImport.skipped`` en vez de desaparecer en silencio (ver A02); los
+pesos inválidos interrumpen el archivo. El controlador decide qué campos
+pueden persistirse."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 import io
 import math
 import re
@@ -22,6 +22,22 @@ import pandas as pd
 from app.money import parse_money
 
 
+@dataclass(frozen=True)
+class SkippedRow:
+    """Fila descartada del archivo junto con el motivo legible para el usuario."""
+
+    row_number: int
+    reason: str
+
+
+@dataclass(frozen=True)
+class ParsedImport:
+    """Filas válidas listas para persistir y filas descartadas con motivo."""
+
+    rows: list[dict[str, Any]]
+    skipped: list[SkippedRow] = field(default_factory=list)
+
+
 WEIGHT_PATTERN = re.compile(
     r"^\s*(\d+(?:[.,]\d+)?)\s*"
     r"(kg|kilos?|kilogramos?|g|gr|gramos?|ml|mililitros?|l|litros?|u|un|unidades?)?\s*$",
@@ -30,6 +46,7 @@ WEIGHT_PATTERN = re.compile(
 
 
 def _normalize_header(value: Any) -> str:
+    """Elimina separadores y diferencias de mayúsculas en encabezados."""
     if value is None:
         return ""
 
@@ -38,6 +55,7 @@ def _normalize_header(value: Any) -> str:
 
 
 def _find_column(columns: list[str], aliases: tuple[str, ...]) -> str | None:
+    """Selecciona el primer alias reconocido según la prioridad declarada."""
     normalized_columns = {_normalize_header(column): column for column in columns}
 
     for alias in aliases:
@@ -48,6 +66,7 @@ def _find_column(columns: list[str], aliases: tuple[str, ...]) -> str | None:
 
 
 def _coerce_text(value: Any) -> str | None:
+    """Convierte vacíos de pandas a None y recorta texto de origen."""
     if value is None or pd.isna(value):
         return None
 
@@ -73,6 +92,7 @@ def _coerce_barcode(value: Any) -> str | None:
 
 
 def _coerce_decimal(value: Any) -> Decimal | None:
+    """Devuelve None para valores rechazados por el parser monetario."""
     try:
         return parse_money(value)
     except (TypeError, ValueError):
@@ -80,6 +100,7 @@ def _coerce_decimal(value: Any) -> Decimal | None:
 
 
 def _coerce_datetime(value: Any) -> datetime | None:
+    """Interpreta día primero y asigna UTC cuando la planilla no trae zona."""
     if value is None or pd.isna(value):
         return None
 
@@ -101,6 +122,7 @@ def _coerce_datetime(value: Any) -> datetime | None:
 
 
 def _normalize_weight_unit(value: Any) -> str | None:
+    """Traduce alias a unidades del dominio; rechaza unidades desconocidas."""
     text = _coerce_text(value)
     if text is None:
         return None
@@ -121,6 +143,7 @@ def _normalize_weight_unit(value: Any) -> str | None:
 
 
 def _coerce_weight(value: Any, unit_value: Any) -> tuple[Decimal | None, str | None]:
+    """Lee cantidad y unidad, usando gramos por defecto si falta la unidad."""
     if value is None or pd.isna(value):
         if _coerce_text(unit_value) is not None:
             raise ValueError("Hay una unidad informada sin peso.")
@@ -141,7 +164,8 @@ def _coerce_weight(value: Any, unit_value: Any) -> tuple[Decimal | None, str | N
     return weight, unit
 
 
-def parse_excel_rows(file_bytes: bytes, filename: str) -> list[dict[str, Any]]:
+def parse_excel_rows(file_bytes: bytes, filename: str) -> ParsedImport:
+    """Lee todo el archivo en memoria; reporta en ``skipped`` lo que no valida."""
     if not file_bytes:
         raise ValueError("El archivo está vacío")
 
@@ -162,7 +186,7 @@ def parse_excel_rows(file_bytes: bytes, filename: str) -> list[dict[str, Any]]:
         )
 
     if dataframe.empty:
-        return []
+        return ParsedImport(rows=[])
 
     columns = list(dataframe.columns)
     barcode_column = _find_column(
@@ -191,20 +215,25 @@ def parse_excel_rows(file_bytes: bytes, filename: str) -> list[dict[str, Any]]:
         raise ValueError("El archivo debe incluir columnas de nombre y precio.")
 
     rows: list[dict[str, Any]] = []
+    skipped: list[SkippedRow] = []
 
     for row_index, row in dataframe.iterrows():
+        row_number = row_index + 2
+        # No se usa ninguna otra celda como reemplazo del código: inferirlo de
+        # otra columna (por ejemplo el nombre) fabricaría una identidad que no
+        # figura en el archivo. Ver A02.
         barcode = _coerce_barcode(
             row[barcode_column] if barcode_column else None
         )
-        if not barcode:
-            barcode = _coerce_barcode(row.iloc[0])
 
         name = _coerce_text(row[name_column])
         if not name:
+            skipped.append(SkippedRow(row_number, "no tiene un nombre válido"))
             continue
 
         price = _coerce_decimal(row[price_column])
         if price is None or price <= 0:
+            skipped.append(SkippedRow(row_number, "no tiene un precio válido"))
             continue
 
         last_updated = (
@@ -220,7 +249,7 @@ def parse_excel_rows(file_bytes: bytes, filename: str) -> list[dict[str, Any]]:
                     row[weight_unit_column] if weight_unit_column else None,
                 )
             except ValueError as exc:
-                raise ValueError(f"Fila {row_index + 2}: {exc}") from exc
+                raise ValueError(f"Fila {row_number}: {exc}") from exc
             weight_fields = {"weight": weight, "weight_unit": weight_unit}
 
         rows.append(
@@ -234,4 +263,4 @@ def parse_excel_rows(file_bytes: bytes, filename: str) -> list[dict[str, Any]]:
             }
         )
 
-    return rows
+    return ParsedImport(rows=rows, skipped=skipped)

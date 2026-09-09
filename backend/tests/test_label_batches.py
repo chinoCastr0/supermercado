@@ -1,3 +1,4 @@
+"""Rechazo secuencial de versiones obsoletas; no simula concurrencia PostgreSQL."""
 from decimal import Decimal
 
 from sqlalchemy import create_engine

@@ -13,6 +13,8 @@ from app.models.product import Product
 from app.schemas.product import ProductCreate, ProductResponse, ProductUpdate
 
 
+# La transacción exterior revierte filas, pero las secuencias PostgreSQL pueden
+# avanzar igualmente. Ejecutar sobre una base de pruebas restaurada.
 barcode = f"TRC{uuid4().hex[:12]}"
 frontend_input = "1234.56"
 payload = {

@@ -1,3 +1,4 @@
+"""Reglas puras para invalidar carteles ante cambios visibles."""
 from decimal import Decimal
 
 from app.models.product import Product

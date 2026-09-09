@@ -1,3 +1,4 @@
+"""Consulta exacta de barcode con ceros iniciales y respuesta de ausencia."""
 from decimal import Decimal
 
 import pytest

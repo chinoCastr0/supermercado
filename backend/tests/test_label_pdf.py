@@ -1,3 +1,4 @@
+"""Contenido, geometría y paginación PDF con productos sintéticos."""
 from dataclasses import dataclass
 from decimal import Decimal
 from io import BytesIO

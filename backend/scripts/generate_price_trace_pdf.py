@@ -13,6 +13,7 @@ from app.models.product import Product
 from app.services.label_pdf import build_labels_pdf
 
 
+# El destino recibido se sobrescribe. Sólo se persisten ejemplos en SQLite en memoria.
 output = Path(sys.argv[1])
 output.parent.mkdir(parents=True, exist_ok=True)
 engine = create_engine("sqlite:///:memory:")

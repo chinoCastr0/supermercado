@@ -1,4 +1,8 @@
-"""Persistencia de lotes de carteles y versiones incluidas."""
+"""Lotes y copias de los datos usados para generar carteles.
+
+Los snapshots sobreviven al borrado del producto porque product_id no tiene FK.
+Las columnas opcionales permiten reconocer lotes antiguos sin una copia completa.
+La inmutabilidad es una convención de aplicación, no una restricción de la tabla."""
 
 from datetime import datetime, timezone
 from decimal import Decimal

@@ -21,7 +21,7 @@ pydantic==2.13.4
 pydantic_core==2.46.4
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.2
-python-multipart==0.0.20
+python-multipart==0.0.31
 pypdf==6.16.2
 PyMuPDF==1.28.2
 reportlab==5.0.1

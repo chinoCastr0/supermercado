@@ -1,11 +1,7 @@
-"""Infraestructura de conexión, sesiones y compatibilidad del esquema.
+"""Motor SQLAlchemy, sesiones por petición y adaptación aditiva del esquema.
 
-IMPORTANCIA: ofrece una única forma de acceder a la base de datos.
-PATRÓN / SOLID: `get_db` implementa Dependency Injection y cada Session funciona
-como Unit of Work. Los controladores dependen de una sesión provista por FastAPI.
-SOLUCIÓN ESPECÍFICA: leer DATABASE_URL y agregar `last_updated` a instalaciones
-anteriores. Esa migración puntual no es un patrón ni reemplaza Alembic a escala.
-"""
+Los controladores deciden cuándo confirmar la transacción; get_db sólo cierra
+la sesión. initialize_database no reemplaza un historial de migraciones versionado."""
 
 import os
 from collections.abc import Generator

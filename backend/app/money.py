@@ -73,6 +73,7 @@ def parse_money(value: Any) -> Decimal:
 
     if isinstance(value, bool) or value is None:
         raise ValueError("El precio debe ser un número decimal válido")
+
     if isinstance(value, Decimal):
         decimal_value = value
     elif isinstance(value, int):
@@ -94,7 +95,13 @@ def parse_money(value: Any) -> Decimal:
     if decimal_value.as_tuple().exponent < -2:
         raise ValueError("El precio admite como máximo dos decimales")
 
-    normalized = decimal_value.quantize(CENT)
+    try:
+        # quantize aplica la precisión del contexto (28 dígitos por defecto);
+        # un valor extremo dispara InvalidOperation en vez de un ValueError
+        # de entrada. Ver A08.
+        normalized = decimal_value.quantize(CENT)
+    except InvalidOperation as exc:
+        raise ValueError("El precio supera el máximo de 12 dígitos") from exc
     if len(normalized.as_tuple().digits) > MONEY_MAX_DIGITS:
         raise ValueError("El precio supera el máximo de 12 dígitos")
     return normalized

@@ -10,6 +10,7 @@ from app.services.label_pdf import build_labels_pdf
 
 @dataclass
 class SampleProduct:
+    """Datos de ejemplo compatibles con el protocolo del renderizador."""
     id: int
     barcode: str
     name: str
@@ -19,6 +20,7 @@ class SampleProduct:
 
 
 def sample_products() -> list[SampleProduct]:
+    """Prepara 25 carteles y un código vacío para verificar paginación y exclusión."""
     units = [
         (Decimal("500"), "g"),
         (Decimal("1.5"), "l"),

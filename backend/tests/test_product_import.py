@@ -1,3 +1,4 @@
+"""Integración del importador y la persistencia con SQLite en memoria."""
 from datetime import datetime, timezone
 from decimal import Decimal
 from io import BytesIO
@@ -51,6 +52,7 @@ def test_import_updates_existing_and_creates_new_products_in_one_batch() -> None
             "price_updated_count": 1,
             "preserved_price_barcodes": [],
             "skipped_barcodes": ["Sin código"],
+            "invalid_rows": [],
         }
         assert [product.barcode for product in products] == ["111", "222"]
         assert products[0].price == Decimal("1800.00")
@@ -61,3 +63,31 @@ def test_import_updates_existing_and_creates_new_products_in_one_batch() -> None
         assert products[0].label_version == 4
         assert products[0].printed is False
         assert products[1].printed is False
+
+
+def test_import_rejects_a_new_product_that_would_not_fit_the_register() -> None:
+    """Regresión A09: un barcode nuevo respeta los mismos límites que el alta manual."""
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    dataframe = pd.DataFrame(
+        [
+            {
+                "barcode": "333",
+                # Más de 18 bytes CP1252: el alta manual la rechazaría igual.
+                "name": "Nombre demasiado largo para la caja registradora",
+                "price": 100,
+            },
+        ]
+    )
+    content = BytesIO()
+    dataframe.to_excel(content, index=False, engine="openpyxl")
+    upload = UploadFile(filename="productos.xlsx", file=BytesIO(content.getvalue()))
+
+    with Session(engine) as db:
+        result = import_products(upload, db)
+        products = db.scalars(select(Product)).all()
+
+        assert products == []
+        assert result["imported_count"] == 0
+        assert len(result["invalid_rows"]) == 1
+        assert "333" in result["invalid_rows"][0]

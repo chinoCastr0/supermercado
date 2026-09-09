@@ -1,3 +1,4 @@
+"""Trazabilidad monetaria, revisiones y snapshots con SQLite y PDFs en memoria."""
 from decimal import Decimal
 from io import BytesIO
 
@@ -281,6 +282,34 @@ def test_stale_edit_cannot_overwrite_a_newer_price() -> None:
 
         assert conflict.value.status_code == 409
         assert product.price == Decimal("6000.00")
+
+
+def test_update_rejects_a_weight_left_without_its_unit() -> None:
+    """Regresión A03: enviar sólo `weight` no debe dejar `weight_unit` huérfano."""
+    engine = _engine()
+    with Session(engine) as db:
+        product = create_product(
+            ProductCreate(
+                barcode="WEIGHT-PAIR",
+                name="Producto",
+                price="5300",
+                weight="500",
+                weight_unit="g",
+            ),
+            db,
+        )
+
+        with pytest.raises(HTTPException) as error:
+            update_product(
+                product.id,
+                ProductUpdate(expected_revision=product.revision, weight=None),
+                db,
+            )
+        db.refresh(product)
+
+        assert error.value.status_code == 422
+        assert product.weight == Decimal("500.00")
+        assert product.weight_unit == "g"
 
 
 def test_print_batch_is_an_immutable_snapshot_after_catalog_price_changes() -> None:

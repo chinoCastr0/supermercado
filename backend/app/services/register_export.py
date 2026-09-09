@@ -30,6 +30,7 @@ class RegisterExportError(ValueError):
 
 
 def _encode_text(value: str, field: str, product_id: int) -> bytes:
+    """Codifica CP1252 sin sustituciones silenciosas ni controles admitidos por el filtro."""
     if any(character in value for character in ("\x00", "\r", "\n", "\t")):
         raise RegisterExportError(
             f"El producto ID {product_id} tiene caracteres de control en {field}."
@@ -45,6 +46,8 @@ def _encode_text(value: str, field: str, product_id: int) -> bytes:
 
 def _assign_plu(product: ExportableProduct, used: set[int]) -> int:
     """Conserva IDs compatibles como PLU y asigna huecos a IDs más grandes."""
+    # La asignación se recalcula por exportación; no es una identidad durable.
+    # El recorrido de huecos puede ser cuadrático cuando abundan IDs altos.
     if 0 <= product.id < RECORD_COUNT and product.id not in used:
         used.add(product.id)
         return product.id
@@ -85,6 +88,7 @@ def _register_price_bytes(price: Decimal, product_id: int) -> bytes:
 
 
 def _record(plu: int, price: bytes, name: bytes, barcode: bytes) -> bytes:
+    """Ensambla un registro de 58 bytes; el nombre se recorta a 18 bytes."""
     name_field = name[:NAME_SIZE].ljust(NAME_SIZE, b" ") + b"\x00"
     barcode_field = barcode.ljust(BARCODE_SIZE, b" ") + b"\x00"
     result = struct.pack("<H", plu) + price + name_field + barcode_field + TRAILER

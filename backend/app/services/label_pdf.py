@@ -24,6 +24,7 @@ VISIBLE_LABEL_FIELDS = frozenset({"barcode", "name", "price", "weight", "weight_
 
 
 class LabelProduct(Protocol):
+    """Interfaz estructural de lectura: el renderizador no necesita modelos ORM."""
     id: int
     barcode: str
     name: str
@@ -46,12 +47,14 @@ class LabelProductSnapshot:
 
 @dataclass(frozen=True)
 class ComparablePrice:
+    """Precio normalizado por kilo, litro o unidad y su leyenda."""
     label: str
     price: Decimal
 
 
 @dataclass(frozen=True)
 class LabelWarning:
+    """Producto omitido y causa para informar al operador."""
     product_id: int
     product_name: str
     reason: str
@@ -59,6 +62,7 @@ class LabelWarning:
 
 @dataclass(frozen=True)
 class LabelPdfResult:
+    """Bytes generados, orden efectivo de productos y exclusiones del lote."""
     content: bytes
     generated_product_ids: list[int]
     warnings: list[LabelWarning]
@@ -108,6 +112,7 @@ def format_ars(value: Decimal, *, keep_cents: bool = True) -> str:
 
 
 def format_presentation(weight: Decimal | None, unit: str | None) -> str:
+    """Presenta cantidad sin ceros decimales innecesarios y unidad visible."""
     if weight is None or unit is None:
         return ""
     display_weight = weight.normalize()
@@ -117,6 +122,7 @@ def format_presentation(weight: Decimal | None, unit: str | None) -> str:
 
 
 def _ean_checksum(payload: str) -> int:
+    """Calcula el dígito verificador EAN alternando pesos desde la derecha."""
     total = sum(
         int(digit) * (3 if (len(payload) - index) % 2 == 1 else 1)
         for index, digit in enumerate(payload)
@@ -143,6 +149,7 @@ def barcode_spec(value: str) -> tuple[str, str] | None:
 
 
 def _fit_font_size(text: str, font: str, maximum: float, width: float) -> float:
+    """Reduce la fuente hasta el mínimo; textos extremos todavía pueden exceder el ancho."""
     size = maximum
     while size > 5.5 and pdfmetrics.stringWidth(text, font, size) > width:
         size -= 0.25
@@ -155,6 +162,7 @@ def _fit_text(
     maximum_size: float,
     width: float,
 ) -> tuple[str, float]:
+    """Ajusta fuente y luego agrega puntos suspensivos si el nombre no entra."""
     size = _fit_font_size(text, font, maximum_size, width)
     if pdfmetrics.stringWidth(text, font, size) <= width:
         return text, size
@@ -176,6 +184,7 @@ def _draw_label(
     width: float,
     height: float,
 ) -> None:
+    """Dibuja una celda con recorte; guarda y restaura el estado gráfico."""
     padding = 5
     pdf.saveState()
     clip = pdf.beginPath()

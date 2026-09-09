@@ -6,6 +6,7 @@ import sys
 import pymupdf
 
 
+# Herramienta CLI: cada PNG reemplaza el archivo de igual nombre del destino.
 source = Path(sys.argv[1])
 output_directory = Path(sys.argv[2])
 output_directory.mkdir(parents=True, exist_ok=True)

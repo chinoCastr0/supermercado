@@ -7,6 +7,7 @@ from app.database import engine, initialize_database
 
 
 def product_price_fingerprint() -> tuple[int, str, str]:
+    """Calcula conteo, suma y huella de precios; requiere PostgreSQL y no bloquea escrituras."""
     with engine.connect() as connection:
         row = connection.execute(
             text(
@@ -20,6 +21,8 @@ def product_price_fingerprint() -> tuple[int, str, str]:
     return int(row.count), row.total, row.fingerprint
 
 
+# Este script modifica la base configurada y confirma DDL. La comparación final
+# detecta diferencias, pero no revierte una migración ya confirmada (auditoría A06).
 before = product_price_fingerprint()
 initialize_database()
 after = product_price_fingerprint()
