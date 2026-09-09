@@ -12,6 +12,13 @@ dist
 dist-ssr
 *.local
 
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+backend/.venv/
+
 # Variables locales y secretos
 .env
 .env.*
