@@ -1,5 +1,11 @@
 # Sistema de inventario y precios para supermercado
 
+Documentación técnica de la revisión del código:
+
+- [Auditoría y errores prioritarios](docs/AUDITORIA.md).
+- [Arquitectura, optimización y preservación](docs/MANTENIMIENTO.md).
+- [Mapa completo de archivos y verificaciones](docs/MAPA_CODIGO.md).
+
 Aplicación web para administrar el catálogo de un supermercado, importar listas
 de precios sin degradar información existente, generar carteles de góndola y
 exportar el catálogo al formato binario `PRESUR1.DAT` utilizado por la caja.
@@ -17,8 +23,10 @@ el mismo valor al ingresarse, persistirse, mostrarse, imprimirse y exportarse.
 
 - Alta, consulta, edición y eliminación de productos.
 - Búsqueda manual o mediante cámara por código de barras.
+- Búsqueda backend por nombre, barcode y presentación con debounce.
 - Filtros por estado activo y estado de impresión.
 - Importación masiva desde `.xlsx` y `.csv`.
+- Cambio de precio y eliminación para una selección de productos.
 - Comparación segura de precios durante una importación.
 - Historial auditable de altas y cambios de precio.
 - Protección frente a ediciones simultáneas y datos desactualizados.
@@ -93,7 +101,8 @@ vigente.
 
 - producto y barcode;
 - precio anterior y precio nuevo;
-- origen (`manual_create`, `manual_update`, `import_create` o `import_update`);
+- origen (`manual_create`, `manual_update`, `bulk_manual_update`,
+  `import_create` o `import_update`);
 - fecha del servidor.
 
 El historial se consulta con `GET /products/{id}/price-history`. Es prospectivo:
@@ -235,12 +244,14 @@ cd ..
 ### 3. Configurar variables
 
 ```powershell
+Copy-Item .env.example .env
 Copy-Item backend\.env.example backend\.env
 ```
 
-El ejemplo usa PostgreSQL en `localhost:5433`, base `supermercado`, usuario
-`admin` y contraseña local `desarrollo`. `backend/.env` no debe versionarse ni
-contener credenciales de producción.
+Elegir una contraseña propia en el `.env` de la raíz (la usa `docker-compose.yml`)
+y reflejar el mismo valor en `backend\.env`. Ninguno de los dos `.env` debe
+versionarse ni contener credenciales de producción; ambos están ignorados por
+Git a propósito.
 
 ### 4. Levantar PostgreSQL
 
@@ -250,6 +261,16 @@ docker compose ps
 ```
 
 El volumen `postgres_data` conserva la base al reiniciar o recrear el contenedor.
+Postgres sólo aplica `POSTGRES_PASSWORD` la primera vez que se crea ese volumen:
+si ya existe uno de una instalación anterior, cambiar el `.env` no rota la
+contraseña real. Para rotarla sin perder los datos, hacerlo con `ALTER ROLE`
+contra el contenedor en ejecución:
+
+```powershell
+docker compose exec database psql -U admin -d supermercado -c "ALTER ROLE admin WITH PASSWORD 'nueva-contraseña';"
+```
+
+y actualizar el mismo valor en ambos `.env`.
 
 ### 5. Iniciar FastAPI
 
@@ -335,6 +356,24 @@ Detalles relevantes:
 - La respuesta informa nuevos, existentes encontrados, precios aumentados,
   barcodes cuyo precio menor fue preservado y filas omitidas sin barcode.
 
+## Búsqueda del inventario
+
+El buscador principal consulta `GET /products?search=...` después de 300 ms sin
+nuevas pulsaciones. La búsqueda se combina en backend con `active_status`,
+`print_status`, `skip` y `limit`; el frontend pagina visualmente el conjunto
+completo devuelto por esas condiciones.
+
+Admite coincidencias parciales y case-insensitive por nombre, barcode textual y
+presentación. Ejemplos válidos: `coca`, `coca zero`, `coca 500`, `coca 500 ml`,
+`galletita 300 g`, `1.5l` y `1,5 l`. Cuando se detecta peso, se compara como
+`Decimal` contra `weight`; si se incluye unidad también debe coincidir
+`weight_unit`. No se convierten barcodes a números ni pesos a `float`.
+
+Las coincidencias exactas de barcode se ordenan primero, luego los nombres que
+comienzan con el texto buscado y finalmente las coincidencias parciales. El
+endpoint separado `GET /products/by-barcode` conserva su coincidencia exacta y
+sigue siendo el utilizado por el escáner.
+
 ## Edición manual
 
 El frontend abre un producto con su `revision` actual. Al guardar, incluye esa
@@ -345,6 +384,16 @@ conservar.
 Modificar barcode, nombre, precio, peso o unidad incrementa `label_version` y
 devuelve el cartel al estado pendiente. Cambiar el precio agrega además una fila
 al historial.
+
+El cambio masivo utiliza un precio absoluto y conserva la `expected_revision` de
+cada producto seleccionado. Antes de enviar muestra nombre, barcode, precio
+actual y precio nuevo de todos los productos. Si una sola revisión está obsoleta,
+el backend responde HTTP 409 y revierte el lote completo. Los productos que ya
+tienen el precio solicitado no generan escrituras ni eventos de historial.
+
+La eliminación masiva valida primero todos los IDs y se confirma en una única
+transacción. Conserva el historial de precios y los snapshots de lotes con la
+misma semántica que la eliminación individual.
 
 ## Carteles de precios
 
@@ -412,13 +461,15 @@ Vite.
 | Método | Ruta | Función |
 | --- | --- | --- |
 | `GET` | `/health` | Disponibilidad del backend. |
-| `GET` | `/products` | Lista paginada; acepta `skip`, `limit` y `print_status`. |
+| `GET` | `/products` | Lista/busca; acepta `search`, `active_status`, `print_status`, `skip` y `limit`. |
 | `POST` | `/products` | Crea un producto y su primer evento de precio. |
 | `GET` | `/products/by-barcode?barcode=...` | Busca el barcode textual exacto. |
 | `GET` | `/products/{id}` | Obtiene un producto. |
 | `GET` | `/products/{id}/price-history` | Devuelve el historial de precios. |
 | `PUT` | `/products/{id}` | Edición manual con `expected_revision`. |
 | `DELETE` | `/products/{id}` | Elimina un producto. |
+| `PUT` | `/products/bulk-price` | Aplica atómicamente un precio absoluto a una selección. |
+| `DELETE` | `/products/bulk` | Elimina atómicamente una selección. |
 | `POST` | `/products/import` | Importa Excel o CSV con política increase-only. |
 | `GET` | `/products/export/register` | Descarga `PRESUR1.DAT`. |
 | `GET` | `/labels/pending-count` | Cuenta carteles pendientes. |
@@ -479,10 +530,10 @@ $env:PYTHONPATH="."
 .\.venv\Scripts\python.exe -m pytest tests -q
 ```
 
-La línea base al documentar este estado es de 51 pruebas backend y 3 pruebas
+La línea base al documentar este estado es de 61 pruebas backend y 9 pruebas
 frontend. Se cubren dinero decimal, importación, preservación de campos,
-concurrencia, historial, barcode, PDFs, snapshots, confirmación de lotes y
-exportación binaria.
+concurrencia, operaciones masivas, historial, barcode, PDFs, snapshots,
+confirmación de lotes y exportación binaria.
 
 ## Scripts de diagnóstico
 
@@ -569,6 +620,9 @@ hard_invariants:
   - an import updates only price for an existing barcode
   - full imported rows are used only for new barcodes
   - manual updates require the current expected_revision
+  - bulk price updates validate every revision before changing any product
+  - bulk delete validates every ID before deleting any product
+  - inventory search runs in the backend and keeps barcodes textual
   - every persisted price change creates an audit event
   - generated label batches retain immutable printable snapshots
   - batch confirmation never marks a newer product version as printed
