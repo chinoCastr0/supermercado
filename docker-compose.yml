@@ -1,13 +1,16 @@
 # IMPORTANCIA: levanta la base PostgreSQL local usada por el backend.
 # PATRÓN: Infrastructure as Code; describe infraestructura reproducible.
-# SOLUCIÓN ESPECÍFICA: versión, credenciales, puerto y volumen de desarrollo.
+# SOLUCIÓN ESPECÍFICA: puerto y volumen de desarrollo; las credenciales viven
+# en el .env raíz (ignorado por Git, ver .env.example), nunca hardcodeadas
+# acá. Un .env commiteado con una contraseña real es justamente cómo se filtró
+# una credencial en el historial de este repo (ver docs/AUDITORIA.md, A16).
 services:
   database:
     image: postgres:17
     environment:
-      POSTGRES_DB: supermercado
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: desarrollo
+      POSTGRES_DB: ${POSTGRES_DB:?Definí POSTGRES_DB en un .env local, ver .env.example}
+      POSTGRES_USER: ${POSTGRES_USER:?Definí POSTGRES_USER en un .env local, ver .env.example}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Definí POSTGRES_PASSWORD en un .env local, ver .env.example}
     ports:
       - "5433:5432"
     volumes:
