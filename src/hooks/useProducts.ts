@@ -1,26 +1,25 @@
 /**
- * IMPORTANCIA: administra el ciclo de vida y las operaciones del inventario.
- *
- * PATRÓN / SOLID: este Custom Hook actúa como servicio de aplicación para React.
- * Aplica SRP al separar estado/asíncronía de la presentación. Los componentes
- * consumen una interfaz estable en lugar de depender directamente de `fetch`.
- *
- * SOLUCIÓN ESPECÍFICA: mensajes en español, confirmación de borrado y recarga
- * completa luego de guardar o importar.
+ * Estado remoto y operaciones del inventario para React.
+ * Los contadores de carga descartan respuestas antiguas, pero no cancelan fetch.
+ * Las mutaciones pueden completarse aunque falle la recarga posterior del listado.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
-import { productsApi } from "../api/products";
+import { useCallback, useRef, useState } from "react";
+import { BulkPriceConflictError, productsApi } from "../api/products";
 import type {
+  BulkProductRevision,
   GeneratedLabels,
   Notice,
   Product,
+  ProductListFilters,
   ProductPayload,
 } from "../types/product";
 
+/** Conserva el mensaje de Error y usa un texto seguro para otros rechazos. */
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
+/** Expone el listado, estados de operación, avisos y comandos del inventario. */
 export function useProducts() {
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -29,13 +28,21 @@ export function useProducts() {
   const [isGeneratingLabels, setIsGeneratingLabels] = useState(false);
   const [isSearchingBarcode, setIsSearchingBarcode] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
+  // Sólo la última carga puede publicar resultados; las anteriores siguen en red.
   const latestLoad = useRef(0);
+  const latestFilters = useRef<ProductListFilters>({
+    search: "",
+    status: "all",
+    printStatus: "all",
+  });
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (filters?: ProductListFilters) => {
+    if (filters) latestFilters.current = filters;
+    const requestedFilters = latestFilters.current;
     const requestId = ++latestLoad.current;
     setIsLoading(true);
     try {
-      const loadedProducts = await productsApi.listAll();
+      const loadedProducts = await productsApi.listAll(requestedFilters);
       if (requestId === latestLoad.current) setProducts(loadedProducts);
     } catch (error) {
       if (requestId === latestLoad.current) {
@@ -52,13 +59,7 @@ export function useProducts() {
     }
   }, []);
 
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void load();
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [load]);
-
+  // El producto devuelto ya fue confirmado por el servidor; load sólo refresca la vista.
   const save = async (payload: ProductPayload, productId?: number) => {
     setIsSaving(true);
     setNotice(null);
@@ -123,6 +124,64 @@ export function useProducts() {
     }
   };
 
+  const bulkUpdatePrice = async (
+    price: string,
+    selectedProducts: BulkProductRevision[],
+  ) => {
+    setIsSaving(true);
+    setNotice(null);
+    try {
+      const result = await productsApi.bulkUpdatePrice(price, selectedProducts);
+      setNotice({
+        kind: "success",
+        message: `${result.updated_count} precio${result.updated_count === 1 ? "" : "s"} modificado${result.updated_count === 1 ? "" : "s"}${result.unchanged_count ? `; ${result.unchanged_count} sin cambios` : ""}.`,
+      });
+      await load();
+      return true;
+    } catch (error) {
+      if (error instanceof BulkPriceConflictError) {
+        const conflictIds = new Set(error.conflicts.map((conflict) => conflict.id));
+        const names = products
+          .filter((product) => conflictIds.has(product.id))
+          .map((product) => `${product.name} (${product.barcode})`);
+        setNotice({
+          kind: "error",
+          message: `${error.message}${names.length ? ` Desactualizados: ${names.join(", ")}.` : ""} Recargá y revisá la selección antes de volver a intentar.`,
+        });
+      } else {
+        setNotice({
+          kind: "error",
+          message: errorMessage(error, "No se pudieron cambiar los precios."),
+        });
+      }
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const bulkDelete = async (productIds: number[]) => {
+    setIsSaving(true);
+    setNotice(null);
+    try {
+      const result = await productsApi.bulkDelete(productIds);
+      setNotice({
+        kind: "success",
+        message: `${result.deleted_count} producto${result.deleted_count === 1 ? "" : "s"} eliminado${result.deleted_count === 1 ? "" : "s"}.`,
+      });
+      await load();
+      return true;
+    } catch (error) {
+      setNotice({
+        kind: "error",
+        message: errorMessage(error, "No se pudieron eliminar los productos."),
+      });
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const importProducts = async (file: File) => {
     setIsSaving(true);
     setNotice(null);
@@ -130,9 +189,10 @@ export function useProducts() {
       const result = await productsApi.import(file);
       const omitted = result.skipped_barcodes.length;
       const preserved = result.preserved_price_barcodes.length;
+      const invalid = result.invalid_rows.length;
       setNotice({
-        kind: "success",
-        message: `Importación completa: ${result.imported_count} nuevos, ${result.updated_count} existentes, ${result.price_updated_count} precios aumentados${preserved ? ` y ${preserved} precios menores rechazados` : ""}${omitted ? `; ${omitted} omitidos por no tener código de barras` : ""}.`,
+        kind: invalid ? "error" : "success",
+        message: `Importación completa: ${result.imported_count} nuevos, ${result.updated_count} existentes, ${result.price_updated_count} precios aumentados${preserved ? ` y ${preserved} precios menores rechazados` : ""}${omitted ? `; ${omitted} omitidos por no tener código de barras` : ""}${invalid ? `; ${invalid} filas rechazadas por datos inválidos: ${result.invalid_rows.join(" | ")}` : ""}.`,
       });
       await load();
       return true;
@@ -245,6 +305,8 @@ export function useProducts() {
     save,
     findByBarcode,
     remove,
+    bulkUpdatePrice,
+    bulkDelete,
     importProducts,
     exportRegister,
     generateLabels,

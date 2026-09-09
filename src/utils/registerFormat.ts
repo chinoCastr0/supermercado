@@ -1,3 +1,7 @@
+/**
+ * Validación local del texto CP1252 y límites binarios de PRESUR1.DAT.
+ * Cada carácter admitido ocupa un byte; los inválidos se informan antes del envío.
+ */
 export const REGISTER_NAME_BYTES = 18;
 export const REGISTER_BARCODE_BYTES = 15;
 
@@ -5,6 +9,7 @@ const CP1252_EXTRA_CHARACTERS = new Set(
   "€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ",
 );
 
+/** Reconoce el subconjunto imprimible CP1252 admitido en la interfaz. */
 function isCp1252Character(character: string) {
   const codePoint = character.codePointAt(0) ?? 0;
   return (
@@ -14,6 +19,7 @@ function isCp1252Character(character: string) {
   );
 }
 
+/** Informa el primer problema de obligatoriedad, codificación o longitud. */
 export function registerTextError(
   value: string,
   fieldLabel: string,
@@ -29,6 +35,7 @@ export function registerTextError(
   return null;
 }
 
+/** Cuenta bytes representables; la validación informa caracteres excluidos. */
 export function registerByteLength(value: string) {
   return [...value].filter(isCp1252Character).length;
 }

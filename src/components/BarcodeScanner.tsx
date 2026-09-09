@@ -1,4 +1,8 @@
-/** Scanner reutilizable de códigos de barras mediante la cámara del navegador. */
+/**
+ * Lectura de códigos con ZXing y cámara del navegador.
+ * La sesión y el bloqueo de lectura evitan resultados repetidos durante consultas.
+ * El desmontaje detiene los controles y las pistas de video para liberar la cámara.
+ */
 import {
   BarcodeFormat,
   BrowserMultiFormatReader,
@@ -30,6 +34,7 @@ const SUPPORTED_FORMATS = [
   BarcodeFormat.CODE_128,
 ];
 
+/** Traduce fallos de permisos, contexto seguro y disponibilidad de cámara. */
 function cameraErrorMessage(error: unknown): string {
   if (!window.isSecureContext) {
     return "La cámara requiere HTTPS. En esta dirección HTTP el navegador no permite abrirla.";
@@ -49,6 +54,7 @@ function cameraErrorMessage(error: unknown): string {
   return `No se pudo iniciar la cámara: ${error.message}`;
 }
 
+/** Controla sesión de captura, consulta de código y opción de alta. */
 export function BarcodeScanner({
   onClose,
   onDetected,
@@ -67,6 +73,7 @@ export function BarcodeScanner({
     onDetectedRef.current = onDetected;
   }, [onDetected]);
 
+  // Invalidar la sesión también vuelve irrelevantes las respuestas tardías de captura.
   const stopScanner = useCallback(() => {
     sessionRef.current += 1;
     controlsRef.current?.stop();

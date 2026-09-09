@@ -1,4 +1,7 @@
-/** Previsualiza un lote PDF y exige confirmación explícita después de imprimir. */
+/**
+ * Vista previa y descarga del PDF; la confirmación es una acción independiente.
+ * El padre es dueño de la URL blob y debe revocarla cuando termine su uso.
+ */
 import type { GeneratedLabels } from "../types/product";
 import { Modal } from "./Modal";
 
@@ -14,6 +17,7 @@ type Props = {
   onConfirm: () => void;
 };
 
+/** Muestra el documento sin marcar productos hasta una confirmación explícita. */
 export function LabelPreviewModal({
   preview,
   isSaving,

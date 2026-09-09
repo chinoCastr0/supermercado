@@ -1,7 +1,7 @@
 {
   /*
    * IMPORTANCIA: define cómo TypeScript valida el código ejecutado en el browser.
-   * PRINCIPIO: las reglas estrictas detectan errores temprano; las opciones son
+   * PRINCIPIO: estas reglas detectan errores temprano; strict aún no está habilitado. Las opciones son
    * decisiones de tooling y no una aplicación directa de SOLID.
    */
   "compilerOptions": {

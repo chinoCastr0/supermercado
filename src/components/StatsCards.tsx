@@ -1,12 +1,11 @@
 /**
- * IMPORTANCIA: resume indicadores derivados de la colección de productos.
- *
- * PATRÓN / SOLID: Presentational Component con datos derivados; aplica SRP al
- * mantener estos cálculos fuera de `App`. Las métricas elegidas son una solución
- * específica del negocio, no forman parte del patrón.
+ * Indicadores calculados sobre la colección recibida.
+ * Actualmente App entrega resultados filtrados; estos valores no equivalen
+ * a totales globales cuando hay una búsqueda o un filtro activo.
  */
 import type { Product } from "../types/product";
 
+/** Resume únicamente los productos de la colección recibida. */
 export function StatsCards({ products }: { products: Product[] }) {
   const active = products.filter((product) => product.active).length;
   const pending = products.filter((product) => !product.printed).length;

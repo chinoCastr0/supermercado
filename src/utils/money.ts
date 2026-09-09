@@ -1,5 +1,11 @@
+/**
+ * Normalización, formato y comparación monetaria sin aritmética float.
+ * Se usan strings y centavos BigInt. Mantener las convenciones de separadores
+ * sincronizadas con backend/app/money.py y sus pruebas de contrato.
+ */
 const MONEY_MAX_DIGITS = 12;
 
+/** Comprueba grupos de miles de tres cifras después del primer grupo. */
 function isGroupedInteger(value: string, separator: "." | ",") {
   const groups = value.split(separator);
   return (
@@ -9,6 +15,7 @@ function isGroupedInteger(value: string, separator: "." | ",") {
   );
 }
 
+/** Aplica la convención de separadores y devuelve null cuando no la reconoce. */
 function canonicalMoneyText(rawValue: string): string | null {
   const value = rawValue.trim();
   if (!value || !/^[\d.,]+$/.test(value)) return null;
@@ -54,6 +61,7 @@ function canonicalMoneyText(rawValue: string): string | null {
   return null;
 }
 
+/** Devuelve precio positivo con dos decimales dentro del límite de 12 dígitos. */
 export function normalizeMoneyInput(rawValue: string): string | null {
   const canonical = canonicalMoneyText(rawValue);
   if (!canonical) return null;
@@ -66,6 +74,7 @@ export function normalizeMoneyInput(rawValue: string): string | null {
   return `${integer}.${cents}`;
 }
 
+/** Agrupa miles y centavos por texto, sin perder precisión. */
 export function formatMoney(value: string): string {
   const normalized = normalizeMoneyInput(value);
   if (!normalized) return "Precio inválido";
@@ -74,6 +83,7 @@ export function formatMoney(value: string): string {
   return `$ ${grouped},${cents}`;
 }
 
+/** Compara centavos BigInt; ante texto inválido usa orden lexicográfico. */
 export function compareMoney(left: string, right: string): number {
   const normalizedLeft = normalizeMoneyInput(left);
   const normalizedRight = normalizeMoneyInput(right);

@@ -1,29 +1,35 @@
 /**
- * IMPORTANCIA: concentra toda la comunicación HTTP del dominio de productos.
- *
- * PATRÓN / SOLID: es un API Gateway (fachada de infraestructura). Aplica SRP
- * porque los componentes no construyen URLs ni interpretan respuestas HTTP, y
- * favorece DIP porque el resto de la UI depende de esta frontera pequeña.
- *
- * SOLUCIÓN ESPECÍFICA: rutas `/products`, paginación de 500 registros y FormData.
+ * Adaptador HTTP del inventario y carteles. Centraliza URLs, errores y descargas.
+ * Los tipos T son contratos estáticos; request no valida el JSON en ejecución.
+ * listAll consume páginas sucesivas de 500 hasta completar los resultados.
  */
 import type {
   BatchConfirmation,
+  BulkDeleteResult,
+  BulkPriceConflict,
+  BulkPriceResult,
+  BulkProductRevision,
   GeneratedLabels,
   LabelWarning,
   Product,
   ProductImportResult,
+  ProductListFilters,
   ProductPayload,
 } from "../types/product";
+import { buildProductListQuery } from "../utils/productSearch";
 
 const API_URL = (
   import.meta.env.VITE_API_URL ?? "/api"
 ).replace(/\/$/, "");
 
+/** Interpreta errores FastAPI textuales, de validación o de conflicto estructurado. */
 async function readError(response: Response): Promise<string> {
   try {
     const data = (await response.json()) as {
-      detail?: string | Array<{ msg?: string }>;
+      detail?:
+        | string
+        | Array<{ msg?: string }>
+        | { message?: string };
     };
     if (typeof data.detail === "string") return data.detail;
     if (Array.isArray(data.detail)) {
@@ -32,12 +38,16 @@ async function readError(response: Response): Promise<string> {
         .filter((message): message is string => Boolean(message));
       if (messages.length) return messages.join(" ");
     }
+    if (data.detail && "message" in data.detail && data.detail.message) {
+      return data.detail.message;
+    }
     return "No se pudo completar la operación.";
   } catch {
     return "No se pudo completar la operación.";
   }
 }
 
+/** Envía la petición y convierte respuestas no exitosas en Error; 204 no tiene JSON. */
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, init);
   if (!response.ok) throw new Error(await readError(response));
@@ -46,19 +56,31 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     : (response.json() as Promise<T>);
 }
 
+export class BulkPriceConflictError extends Error {
+  conflicts: BulkPriceConflict[];
+
+  constructor(message: string, conflicts: BulkPriceConflict[]) {
+    super(message);
+    this.name = "BulkPriceConflictError";
+    this.conflicts = conflicts;
+  }
+}
+
 export const productsApi = {
-  async listAll(): Promise<Product[]> {
+  /** Descarga secuencialmente todas las páginas que coinciden con los filtros. */
+  async listAll(filters: ProductListFilters): Promise<Product[]> {
     const products: Product[] = [];
     const limit = 500;
     for (let skip = 0; ; skip += limit) {
       const batch = await request<Product[]>(
-        `/products?skip=${skip}&limit=${limit}`,
+        `/products?${buildProductListQuery(filters, skip, limit)}`,
       );
       products.push(...batch);
       if (batch.length < limit) return products;
     }
   },
 
+  /** Distingue ausencia (null) de fallos de red o del servidor. */
   async findByBarcode(barcode: string): Promise<Product | null> {
     const response = await fetch(
       `${API_URL}/products/by-barcode?barcode=${encodeURIComponent(barcode)}`,
@@ -68,6 +90,7 @@ export const productsApi = {
     return response.json() as Promise<Product>;
   },
 
+  /** Envía alta o edición; las ediciones deben incluir expected_revision. */
   save(payload: ProductPayload, productId?: number): Promise<Product> {
     return request(`/products${productId ? `/${productId}` : ""}`, {
       method: productId ? "PUT" : "POST",
@@ -76,16 +99,54 @@ export const productsApi = {
     });
   },
 
+  /** Solicita el borrado definitivo de una identidad. */
   remove(productId: number): Promise<void> {
     return request(`/products/${productId}`, { method: "DELETE" });
   },
 
+  /** Conserva los detalles del conflicto para identificar revisiones obsoletas. */
+  async bulkUpdatePrice(
+    price: string,
+    products: BulkProductRevision[],
+  ): Promise<BulkPriceResult> {
+    const response = await fetch(`${API_URL}/products/bulk-price`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ price, products }),
+    });
+    if (response.status === 409) {
+      const data = (await response.json()) as {
+        detail?: {
+          message?: string;
+          conflicts?: BulkPriceConflict[];
+        };
+      };
+      throw new BulkPriceConflictError(
+        data.detail?.message ?? "Hay productos desactualizados.",
+        data.detail?.conflicts ?? [],
+      );
+    }
+    if (!response.ok) throw new Error(await readError(response));
+    return response.json() as Promise<BulkPriceResult>;
+  },
+
+  /** Envía una selección que el servidor procesa dentro de una transacción. */
+  bulkDelete(productIds: number[]): Promise<BulkDeleteResult> {
+    return request("/products/bulk", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ product_ids: productIds }),
+    });
+  },
+
+  /** Adjunta el archivo como multipart sin fijar manualmente su boundary. */
   import(file: File): Promise<ProductImportResult> {
     const body = new FormData();
     body.append("file", file);
     return request("/products/import", { method: "POST", body });
   },
 
+  /** Descarga el binario de caja y libera la URL temporal después del clic. */
   async exportRegister(): Promise<void> {
     const response = await fetch(`${API_URL}/products/export/register`);
     if (!response.ok) throw new Error(await readError(response));
@@ -100,6 +161,7 @@ export const productsApi = {
     window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
   },
 
+  /** Recupera PDF y metadatos del lote que luego podrá confirmarse. */
   async generateLabels(productIds: number[]): Promise<GeneratedLabels> {
     const response = await fetch(`${API_URL}/labels/generate`, {
       method: "POST",
@@ -129,10 +191,12 @@ export const productsApi = {
     };
   },
 
+  /** Confirma lo impreso usando el identificador persistente del lote. */
   confirmLabelBatch(batchId: string): Promise<BatchConfirmation> {
     return request(`/labels/batches/${batchId}/confirm`, { method: "POST" });
   },
 
+  /** Cambia el estado manual sin enviar la versión que el operador vio. */
   setPrintStatus(productIds: number[], printed: boolean) {
     return request<{ updated_count: number }>("/labels/status", {
       method: "PUT",

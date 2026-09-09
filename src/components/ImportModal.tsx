@@ -1,11 +1,7 @@
 /**
- * IMPORTANCIA: presenta y controla la selección de archivos de importación.
- *
- * PATRÓN / SOLID: componente especializado construido por composición sobre
- * `Modal`; aplica SRP. La callback `onImport` invierte la dependencia (DIP):
- * este archivo no conoce endpoints ni `fetch`.
- *
- * SOLUCIÓN ESPECÍFICA: extensiones aceptadas, textos y cálculo visual de KB.
+ * Selección de archivo y feedback de importación mediante onImport.
+ * accept orienta el selector del navegador; las restricciones reales pertenecen
+ * al servidor. Elegir otro archivo limpia el estado visual de envío.
  */
 import { useRef, useState } from "react";
 import type { ChangeEvent } from "react";
@@ -17,6 +13,7 @@ type Props = {
   onClose: () => void;
   onImport: (file: File) => Promise<boolean>;
 };
+/** Conserva el archivo elegido y muestra errores después del primer envío. */
 export function ImportModal({ error, isSaving, onClose, onImport }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [submitted, setSubmitted] = useState(false);

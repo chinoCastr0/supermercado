@@ -1,10 +1,6 @@
 /**
- * IMPORTANCIA: define la estructura persistente de navegación y contenido.
- *
- * PATRÓN / SOLID: Layout Component basado en composición (`children`). Aplica
- * OCP porque cualquier pantalla puede insertarse sin cambiar su estructura.
- *
- * SOLUCIÓN ESPECÍFICA: marca Supermercado y enlaces del inventario.
+ * Navegación y estructura persistente que envuelve el contenido mediante children.
+ * El texto de conexión es estático: no refleja el estado real de PostgreSQL.
  */
 import type { ReactNode } from "react";
 
@@ -14,6 +10,7 @@ type Props = {
   onRefresh: () => void;
 };
 
+/** Compone navegación, cabecera y contenido de la pantalla. */
 export function Layout({ children, onImport, onRefresh }: Props) {
   return (
     <div className="app-shell">

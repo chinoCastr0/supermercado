@@ -1,8 +1,6 @@
 /**
- * IMPORTANCIA: agrupa los controles de búsqueda, estado y orden.
- *
- * PATRÓN / SOLID: Controlled Component. Aplica SRP e ISP porque sólo recibe los
- * valores y callbacks necesarios. El catálogo de filtros es solución específica.
+ * Controles de búsqueda, estado y orden administrados por el componente padre.
+ * Los cambios se notifican por callbacks; el debounce se aplica fuera del formulario.
  */
 import type {
   PrintFilter,
@@ -21,6 +19,7 @@ type Props = {
   onSortChange: (value: ProductSort) => void;
 };
 
+/** Presenta valores controlados y comunica cambios sin consultar datos. */
 export function ProductFilters({
   query,
   status,
@@ -38,7 +37,7 @@ export function ProductFilters({
         <input
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
-          placeholder="Buscar por nombre o código..."
+          placeholder="Buscar nombre, peso o código..."
           aria-label="Buscar productos"
         />
       </label>

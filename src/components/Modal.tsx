@@ -1,11 +1,7 @@
 /**
- * IMPORTANCIA: reúne comportamiento accesible y cierre común de los modales.
- *
- * PATRÓN / SOLID: usa composición mediante `children` y aplica OCP: un modal
- * nuevo extiende este contenedor sin modificarlo. También aplica SRP al aislar
- * Escape, backdrop y atributos ARIA.
- *
- * SOLUCIÓN ESPECÍFICA: bloquear el cierre mientras una operación está ocupada.
+ * Contenedor compartido: composición visual, ARIA, Escape y clic en el fondo.
+ * isBusy bloquea esos dos cierres; los botones de cada hijo deben respetarlo
+ * por separado. Todavía no implementa retención ni restauración del foco.
  */
 import { useEffect } from "react";
 import type { ReactNode } from "react";
@@ -18,6 +14,7 @@ type Props = {
   className?: string;
 };
 
+/** Envuelve cualquier contenido de diálogo y registra el cierre por Escape. */
 export function Modal({ titleId, isBusy, onClose, children, className }: Props) {
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {

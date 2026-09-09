@@ -1,10 +1,7 @@
 /**
- * IMPORTANCIA: presenta resultados, estados vacío/carga y paginación.
- *
- * PATRÓN / SOLID: Presentational Component. Aplica DIP al emitir acciones por
- * callbacks y no importar la API. Sus props explícitas ejemplifican ISP.
- *
- * SOLUCIÓN ESPECÍFICA: columnas, diez filas por página y textos del inventario.
+ * Representación de una página y emisión de acciones mediante callbacks.
+ * No consulta la API. El cálculo del rango asume diez filas por página y debe
+ * mantenerse sincronizado con PAGE_SIZE de App.
  */
 import type { Product } from "../types/product";
 import { formatDate } from "../utils/formatters";
@@ -27,6 +24,7 @@ type Props = {
   onPrintStatus: (product: Product, printed: boolean) => void;
 };
 
+/** Muestra una página y notifica selección, edición, borrado e impresión. */
 export function ProductsTable({
   products,
   total,

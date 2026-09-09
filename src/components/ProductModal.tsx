@@ -1,11 +1,7 @@
 /**
- * IMPORTANCIA: contiene el formulario para crear o editar un producto.
- *
- * PATRÓN / SOLID: reutiliza el mismo componente para dos casos mediante estado
- * inicial y composición. Aplica DIP al delegar la persistencia en `onSave` y SRP
- * al ocuparse sólo de interacción/validación del formulario.
- *
- * SOLUCIÓN ESPECÍFICA: campos, placeholders y validaciones del producto.
+ * Formulario de alta/edición con validación local de precio y texto PRESUR.
+ * onSave delega la persistencia. La revisión se toma del producto que abrió
+ * el formulario para que el servidor pueda rechazar una edición obsoleta.
  */
 import { useState } from "react";
 import type { FormEvent } from "react";
@@ -40,6 +36,7 @@ type Props = {
   onSave: (payload: ProductPayload, productId?: number) => Promise<boolean>;
 };
 
+/** Mantiene un borrador local independiente del registro recibido. */
 export function ProductModal({
   product,
   initialBarcode = "",

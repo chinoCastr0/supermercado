@@ -1,12 +1,9 @@
 /**
- * IMPORTANCIA: representa feedback consistente de éxito o error.
- *
- * PATRÓN / SOLID: Presentational Component y SRP; recibe datos y eventos por
- * props, sin gestionar operaciones. Colores, símbolos y textos son presentación
- * específica, no un patrón de diseño.
+ * Mensaje de resultado con cierre delegado al padre; no ejecuta operaciones.
  */
 import type { Notice } from "../types/product";
 
+/** Renderiza el resultado de una operación con cierre accesible. */
 export function NoticeBanner({
   notice,
   onClose,

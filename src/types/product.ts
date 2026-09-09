@@ -1,10 +1,7 @@
 /**
- * IMPORTANCIA: define el vocabulario compartido del frontend.
- *
- * PATRÓN / SOLID: son DTOs y tipos de dominio. Favorecen ISP porque cada flujo
- * usa sólo la forma de datos que necesita (`Product`, `Draft` o `Payload`).
- *
- * SOLUCIÓN ESPECÍFICA: campos, filtros y opciones de orden del supermercado.
+ * Contratos del frontend para catálogo, edición, filtros y carteles.
+ * Los precios viajan como strings decimales; revision debe volver al servidor
+ * al editar. Estos tipos deben evolucionar junto con los DTOs Pydantic.
  */
 export type WeightUnit = "g" | "kg" | "ml" | "l" | "u";
 
@@ -43,11 +40,33 @@ export type ProductImportResult = {
   price_updated_count: number;
   preserved_price_barcodes: string[];
   skipped_barcodes: string[];
+  invalid_rows: string[];
+};
+export type BulkProductRevision = {
+  id: number;
+  expected_revision: number;
+};
+export type BulkPriceResult = {
+  updated_count: number;
+  unchanged_count: number;
+};
+export type BulkPriceConflict = {
+  id: number;
+  expected_revision: number;
+  current_revision: number;
+};
+export type BulkDeleteResult = {
+  deleted_count: number;
 };
 export type Notice = { kind: "success" | "error"; message: string } | null;
 export type StatusFilter = "all" | "active" | "inactive";
 export type PrintFilter = "all" | "pending" | "printed";
 export type ProductSort = "name" | "price-asc" | "price-desc" | "updated-desc";
+export type ProductListFilters = {
+  search: string;
+  status: StatusFilter;
+  printStatus: PrintFilter;
+};
 
 export type LabelWarning = {
   product_id: number;

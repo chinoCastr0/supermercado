@@ -1,8 +1,11 @@
+# Regenera los iconos de public con System.Drawing; reemplaza los PNG de igual nombre.
+# Las dimensiones coinciden con manifest.webmanifest y el icono táctil de index.html.
 Add-Type -AssemblyName System.Drawing
 
 $outputDirectory = Join-Path $PSScriptRoot "..\public"
 
 function New-PwaIcon {
+  # Dibuja una identidad común escalada y libera los recursos gráficos al terminar.
   param(
     [int]$Size,
     [string]$FileName

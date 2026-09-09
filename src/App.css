@@ -14,6 +14,7 @@
   --green: #238765;
   --green-soft: #e9f6f0;
 }
+/* Estructura de escritorio y navegación persistente. */
 .app-shell {
   min-height: 100vh;
 }
@@ -146,6 +147,7 @@
   display: none;
   color: var(--ink);
 }
+/* Contenido principal, títulos y acciones de la página. */
 .content {
   max-width: 1380px;
   margin: 0 auto;
@@ -185,6 +187,7 @@ h1 {
   display: flex;
   gap: 10px;
 }
+/* Botones compartidos: variantes semánticas y estados de interacción. */
 .button {
   min-height: 42px;
   padding: 0 17px;
@@ -211,11 +214,22 @@ h1 {
 .button.secondary:hover {
   border-color: #beb5c9;
 }
+.button.danger {
+  color: #a53540;
+  background: #fff5f5;
+  border-color: #efc6ca;
+}
+.button.danger:hover {
+  color: #842630;
+  background: #ffecee;
+  border-color: #df9fa6;
+}
 .button:disabled {
   cursor: wait;
   opacity: 0.55;
   transform: none;
 }
+/* Feedback de operaciones; los colores acompañan el mensaje textual. */
 .notice {
   display: flex;
   align-items: center;
@@ -261,6 +275,7 @@ h1 {
 .notice.error > span {
   background: #b94b57;
 }
+/* Indicadores: cuadrícula adaptable sin alterar el orden de lectura. */
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -321,6 +336,7 @@ h1 {
   color: #aaa5ae;
   font-size: 10px;
 }
+/* Catálogo, filtros y barra de operaciones sobre la selección. */
 .data-card {
   overflow: hidden;
   background: #fff;
@@ -412,6 +428,7 @@ h1 {
   background: #fff;
   font-size: 11px;
 }
+/* Tabla de escritorio; en móvil se transforma usando data-label. */
 .table-wrap {
   overflow-x: auto;
 }
@@ -576,6 +593,7 @@ code {
 .row-actions .delete:hover {
   background: #fff0f1;
 }
+/* Navegación de páginas y resumen de filas visibles. */
 .pagination {
   min-height: 62px;
   padding: 12px 24px;
@@ -614,6 +632,7 @@ code {
 .pagination span {
   font-size: 10px;
 }
+/* Estados de carga y ausencia de resultados. */
 .state-panel {
   min-height: 350px;
   display: flex;
@@ -655,6 +674,7 @@ code {
     transform: rotate(360deg);
   }
 }
+/* Diálogos: fondo, límite de altura y controles de formulario compartidos. */
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -794,6 +814,95 @@ code {
   font-size: 12px;
   line-height: 1.6;
 }
+/* Confirmación masiva: comparación completa en un contenedor desplazable. */
+.bulk-price-modal {
+  width: min(100%, 760px);
+}
+.bulk-confirmation {
+  display: grid;
+  gap: 16px;
+}
+.bulk-confirmation .modal-description {
+  margin-bottom: 0;
+}
+.bulk-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.bulk-summary span {
+  display: grid;
+  gap: 3px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--muted);
+  background: #faf9fb;
+  font-size: 10px;
+}
+.bulk-summary strong {
+  color: var(--ink);
+  font-size: 17px;
+}
+.bulk-comparison-list {
+  max-height: min(44vh, 430px);
+  overflow-y: auto;
+  display: grid;
+  gap: 8px;
+  padding-right: 4px;
+}
+.bulk-comparison {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid #ded8e7;
+  border-left: 4px solid var(--purple);
+  border-radius: 9px;
+  background: #fcfbfd;
+}
+.bulk-comparison.unchanged {
+  border-left-color: #aaa5ae;
+  background: #f8f7f8;
+}
+.bulk-comparison > div:first-child {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+.bulk-comparison > div:first-child strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+  font-size: 13px;
+}
+.bulk-comparison code {
+  color: var(--muted);
+  font-size: 11px;
+}
+.bulk-price-change {
+  display: grid;
+  grid-template-columns: auto auto auto;
+  align-items: center;
+  justify-items: end;
+  gap: 8px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+.bulk-price-change b {
+  color: var(--muted);
+}
+.bulk-price-change em {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 600;
+}
+/* Vista previa del PDF; el documento utiliza un iframe con altura limitada. */
 .label-preview-modal {
   width: min(100%, 1040px);
   overflow: hidden;
@@ -826,6 +935,7 @@ code {
 .label-preview-actions {
   flex-wrap: wrap;
 }
+/* Cámara y guías visuales; el estado del componente controla las animaciones. */
 .barcode-scanner-modal {
   width: min(100%, 620px);
   overflow: hidden;
@@ -938,6 +1048,7 @@ code {
   gap: 9px;
   margin-top: 13px;
 }
+/* Selector de archivos: apariencia de zona de carga, apertura por botón. */
 .dropzone {
   width: 100%;
   min-height: 150px;
@@ -982,6 +1093,7 @@ code {
   white-space: nowrap;
   border: 0;
 }
+/* Pantallas intermedias: reduce navegación y apila barras de controles. */
 @media (max-width: 1050px) {
   .sidebar {
     width: 205px;
@@ -1017,6 +1129,7 @@ code {
     flex: 1;
   }
 }
+/* Móvil: tarjetas de producto conservando las etiquetas de cada columna. */
 @media (max-width: 760px) {
   .sidebar {
     display: none;
@@ -1156,6 +1269,7 @@ code {
     justify-content: space-between;
   }
 }
+/* Teléfonos estrechos: acciones y modales se distribuyen en una columna. */
 @media (max-width: 470px) {
   .page-heading {
     flex-direction: column;
@@ -1210,7 +1324,23 @@ code {
   .scanner-actions {
     flex-direction: column-reverse;
   }
+  .bulk-summary {
+    grid-template-columns: 1fr;
+  }
+  .bulk-comparison {
+    grid-template-columns: 1fr;
+  }
+  .bulk-price-change {
+    justify-items: start;
+  }
+  .bulk-confirmation .modal-actions {
+    flex-direction: column-reverse;
+  }
+  .bulk-confirmation .modal-actions .button {
+    width: 100%;
+  }
 }
+/* Respeta la preferencia del sistema para reducir movimiento. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *:before,

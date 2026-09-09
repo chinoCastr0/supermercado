@@ -1,3 +1,9 @@
+/**
+ * Caché de la interfaz para arranque offline; no almacena el inventario.
+ * La navegación prioriza red y los recursos visuales priorizan caché. Revisar
+ * versionado e invalidación antes de desplegar una nueva versión de la aplicación.
+ */
+// Esta clave fija requiere una estrategia de versión en cada release; ver A14.
 const CACHE_NAME = "inventario-app-v1";
 const APP_SHELL = [
   "/",
@@ -7,6 +13,7 @@ const APP_SHELL = [
   "/pwa-512x512.png",
 ];
 
+/** Descubre recursos del HTML y guarda la interfaz en el caché de esta versión. */
 async function cacheAppShell() {
   const cache = await caches.open(CACHE_NAME);
   const response = await fetch("/", { cache: "no-cache" });
@@ -49,6 +56,7 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
+  // Guardar HTML de una versión nueva no precarga automáticamente sus chunks.
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request)

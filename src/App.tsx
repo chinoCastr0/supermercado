@@ -1,18 +1,12 @@
 /**
- * IMPORTANCIA: es el punto de composición de la pantalla de inventario.
- *
- * PATRÓN / SOLID: funciona como Container Component y aplica SRP al coordinar
- * estado de interfaz sin conocer detalles de HTTP ni dibujar cada sección.
- *
- * SOLUCIÓN ESPECÍFICA: filtros, paginación y selección del modal de productos.
- * Estas reglas pueden cambiar sin modificar la API ni los componentes visuales.
- *
- * NOTA DIDÁCTICA: LSP no se marca en este frontend porque no existe una jerarquía
- * de subtipos intercambiables; atribuirlo aquí sería forzar el principio.
+ * Composición de la pantalla: filtros, selección, orden y apertura de modales.
+ * El hook administra operaciones remotas. La paginación actual es local, sobre
+ * todos los resultados descargados. Las selecciones conservan identidades entre filtros.
  */
-import { lazy, Suspense, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import "./App.css";
 import type { ScannerLookupOutcome } from "./components/BarcodeScanner";
+import { BulkPriceModal } from "./components/BulkPriceModal";
 import { ImportModal } from "./components/ImportModal";
 import {
   LabelPreviewModal,
@@ -33,6 +27,10 @@ import type {
   StatusFilter,
 } from "./types/product";
 import { compareMoney } from "./utils/money";
+import {
+  applySearchInput,
+  scheduleDebouncedSearch,
+} from "./utils/productSearch";
 
 const PAGE_SIZE = 10;
 const BarcodeScanner = lazy(() =>
@@ -41,9 +39,12 @@ const BarcodeScanner = lazy(() =>
   })),
 );
 
+/** Coordina el inventario visible y las acciones de sus componentes. */
 function App() {
   const inventory = useProducts();
+  const loadProducts = inventory.load;
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
   const [printStatus, setPrintStatus] = useState<PrintFilter>("all");
   const [sort, setSort] = useState<ProductSort>("name");
@@ -54,24 +55,24 @@ function App() {
   const [editing, setEditing] = useState<Product | null>(null);
   const [newProductBarcode, setNewProductBarcode] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
+  const [bulkPriceProducts, setBulkPriceProducts] = useState<Product[] | null>(
+    null,
+  );
   const [labelPreview, setLabelPreview] = useState<LabelPreview | null>(null);
 
+  useEffect(
+    () => scheduleDebouncedSearch(query, setDebouncedQuery),
+    [query],
+  );
+
+  useEffect(() => {
+    void loadProducts({ search: debouncedQuery, status, printStatus });
+  }, [debouncedQuery, loadProducts, printStatus, status]);
+
+  // El filtrado ya ocurrió en SQL. Este orden local reemplaza la relevancia del backend.
   const filtered = useMemo(() => {
-    const normalized = query.trim().toLocaleLowerCase("es");
     return inventory.products
-      .filter((product) => {
-        const matchesText =
-          !normalized ||
-          product.name.toLocaleLowerCase("es").includes(normalized) ||
-          product.barcode.toLocaleLowerCase("es").includes(normalized);
-        const matchesStatus =
-          status === "all" ||
-          (status === "active" ? product.active : !product.active);
-        const matchesPrintStatus =
-          printStatus === "all" ||
-          (printStatus === "printed" ? product.printed : !product.printed);
-        return matchesText && matchesStatus && matchesPrintStatus;
-      })
+      .slice()
       .sort((left, right) => {
         if (sort === "price-asc")
           return compareMoney(left.price, right.price);
@@ -81,7 +82,7 @@ function App() {
           return Date.parse(right.last_updated) - Date.parse(left.last_updated);
         return left.name.localeCompare(right.name, "es");
       });
-  }, [inventory.products, printStatus, query, sort, status]);
+  }, [inventory.products, sort]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -124,8 +125,13 @@ function App() {
   const availableProductIds = new Set(
     inventory.products.map((product) => product.id),
   );
+  // La selección efectiva excluye identidades que no están en el resultado actual.
+  // selectedIds conserva otras identidades y pueden reaparecer al quitar filtros.
   const selectedProductIds = [...selectedIds].filter((productId) =>
     availableProductIds.has(productId),
+  );
+  const selectedProducts = inventory.products.filter((product) =>
+    selectedIds.has(product.id),
   );
   const toggleSelected = (productId: number) => {
     setSelectedIds((current) => {
@@ -219,6 +225,33 @@ function App() {
       return next;
     });
   };
+  // La copia conserva las revisiones que el usuario revisará antes de confirmar.
+  const openBulkPrice = () => {
+    setBulkPriceProducts(
+      selectedProducts.map((product) => ({ ...product })),
+    );
+  };
+  const applyBulkPrice = async (
+    price: string,
+    products: { id: number; expected_revision: number }[],
+  ) => {
+    const applied = await inventory.bulkUpdatePrice(price, products);
+    if (applied) {
+      setSelectedIds(new Set());
+      setBulkPriceProducts(null);
+    }
+    return applied;
+  };
+  const deleteSelected = async () => {
+    if (!selectedProductIds.length) return;
+    const confirmed = window.confirm(
+      `¿Eliminar permanentemente ${selectedProductIds.length} producto${selectedProductIds.length === 1 ? "" : "s"}?`,
+    );
+    if (!confirmed) return;
+    if (await inventory.bulkDelete(selectedProductIds)) {
+      setSelectedIds(new Set());
+    }
+  };
 
   return (
     <Layout
@@ -279,6 +312,34 @@ function App() {
               </span>
             </div>
             <div>
+              {selectedProductIds.length > 0 && (
+                <>
+                  <button
+                    className="button secondary"
+                    type="button"
+                    disabled={inventory.isSaving}
+                    onClick={openBulkPrice}
+                  >
+                    Cambiar precio
+                  </button>
+                  <button
+                    className="button danger"
+                    type="button"
+                    disabled={inventory.isSaving}
+                    onClick={() => void deleteSelected()}
+                  >
+                    Eliminar seleccionados
+                  </button>
+                  <button
+                    className="button secondary"
+                    type="button"
+                    disabled={inventory.isSaving}
+                    onClick={() => setSelectedIds(new Set())}
+                  >
+                    Limpiar selección
+                  </button>
+                </>
+              )}
               <button
                 className="button secondary"
                 type="button"
@@ -330,7 +391,9 @@ function App() {
               status={status}
               printStatus={printStatus}
               sort={sort}
-              onQueryChange={resetPage(setQuery)}
+              onQueryChange={(value) =>
+                applySearchInput(value, setQuery, setPage)
+              }
               onStatusChange={resetPage(setStatus)}
               onPrintStatusChange={resetPage(setPrintStatus)}
               onSortChange={resetPage(setSort)}
@@ -405,6 +468,19 @@ function App() {
             onCreateProduct={createScannedProduct}
           />
         </Suspense>
+      )}
+      {bulkPriceProducts && (
+        <BulkPriceModal
+          products={bulkPriceProducts}
+          isSaving={inventory.isSaving}
+          error={
+            inventory.notice?.kind === "error"
+              ? inventory.notice.message
+              : null
+          }
+          onClose={() => setBulkPriceProducts(null)}
+          onConfirm={applyBulkPrice}
+        />
       )}
       {labelPreview && (
         <LabelPreviewModal
