@@ -32,7 +32,6 @@ export function useProducts() {
   const latestLoad = useRef(0);
   const latestFilters = useRef<ProductListFilters>({
     search: "",
-    status: "all",
     printStatus: "all",
   });
 

@@ -17,13 +17,11 @@ type ScannerPhase =
   | "starting"
   | "scanning"
   | "searching"
-  | "not-found"
   | "error";
 
 type Props = {
   onClose: () => void;
   onDetected: (barcode: string) => Promise<ScannerLookupOutcome>;
-  onCreateProduct: (barcode: string) => void;
 };
 
 const SUPPORTED_FORMATS = [
@@ -58,7 +56,6 @@ function cameraErrorMessage(error: unknown): string {
 export function BarcodeScanner({
   onClose,
   onDetected,
-  onCreateProduct,
 }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const controlsRef = useRef<IScannerControls | null>(null);
@@ -138,10 +135,7 @@ export function BarcodeScanner({
             .current(barcode)
             .then((outcome) => {
               if (sessionId !== sessionRef.current) return;
-              if (outcome === "not-found") {
-                setPhase("not-found");
-                setMessage("Producto no encontrado");
-              } else if (outcome === "error") {
+              if (outcome === "error") {
                 setPhase("error");
                 setMessage("No se pudo consultar el producto. Revisá la conexión e intentá nuevamente.");
               }
@@ -210,25 +204,6 @@ export function BarcodeScanner({
         <strong>{message}</strong>
         {detectedBarcode && <code>{detectedBarcode}</code>}
       </div>
-
-      {phase === "not-found" && (
-        <div className="scanner-actions">
-          <button
-            className="button secondary"
-            type="button"
-            onClick={() => void startScanner()}
-          >
-            Volver a escanear
-          </button>
-          <button
-            className="button primary"
-            type="button"
-            onClick={() => onCreateProduct(detectedBarcode)}
-          >
-            Cargar nuevo producto
-          </button>
-        </div>
-      )}
 
       {phase === "error" && (
         <div className="scanner-actions">

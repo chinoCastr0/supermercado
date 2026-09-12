@@ -71,7 +71,7 @@ def test_weight_rejects_more_than_two_decimal_places() -> None:
         )
 
 
-@pytest.mark.parametrize("field", ["barcode", "name", "price", "active"])
+@pytest.mark.parametrize("field", ["barcode", "name", "price"])
 def test_update_rejects_explicit_null_on_required_fields(field: str) -> None:
     """Regresión A08: un null explícito no debe llegar a un IntegrityError genérico."""
     with pytest.raises(ValidationError, match="no puede ser nulo"):

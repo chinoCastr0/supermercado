@@ -23,7 +23,7 @@ def _seed(db: Session) -> list[Product]:
         Product(barcode="000125", name="COCA COLA ZERO", price=Decimal("30"), weight=Decimal("500"), weight_unit="ml"),
         Product(barcode="000126", name="COCA COLA ZERO", price=Decimal("40"), weight=Decimal("2.25"), weight_unit="l"),
         Product(barcode="000127", name="Galletita Mana", price=Decimal("50"), weight=Decimal("165"), weight_unit="g"),
-        Product(barcode="000128", name="Galletita Mana", price=Decimal("60"), weight=Decimal("300"), weight_unit="g", active=False),
+        Product(barcode="000128", name="Galletita Mana", price=Decimal("60"), weight=Decimal("300"), weight_unit="g"),
     ]
     db.add_all(products)
     db.commit()
@@ -42,7 +42,6 @@ def _search(db: Session, search: str, **kwargs) -> list[Product]:
         skip=kwargs.get("skip", 0),
         limit=kwargs.get("limit", 500),
         print_status=kwargs.get("print_status", "all"),
-        active_status=kwargs.get("active_status", "all"),
         search=search,
     )
 
@@ -82,12 +81,12 @@ def test_search_accepts_decimal_weight_with_dot_or_comma() -> None:
         assert [item.barcode for item in _search(db, "coca 1,5 l")] == ["000124"]
 
 
-def test_search_combines_print_active_filters_and_pagination() -> None:
+def test_search_combines_print_filters_and_pagination() -> None:
     with Session(_engine()) as db:
         _seed(db)
         assert [item.barcode for item in _search(db, "coca", print_status="printed")] == ["000123"]
-        assert "000128" not in {
-            item.barcode for item in _search(db, "galletita", active_status="active")
+        assert "000128" in {
+            item.barcode for item in _search(db, "galletita")
         }
         first = _search(db, "coca", skip=0, limit=2)
         second = _search(db, "coca", skip=2, limit=2)

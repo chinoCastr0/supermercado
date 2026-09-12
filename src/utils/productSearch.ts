@@ -16,7 +16,6 @@ export function buildProductListQuery(
     skip: String(skip),
     limit: String(limit),
     print_status: filters.printStatus,
-    active_status: filters.status,
   });
   const search = filters.search.trim();
   if (search) params.set("search", search);

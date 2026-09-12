@@ -37,7 +37,6 @@ with engine.connect() as connection:
                 price="5300",
                 weight="500",
                 weight_unit="g",
-                active=False,
             ),
             database,
         )
@@ -69,7 +68,6 @@ with engine.connect() as connection:
             product.name == "CONTROL ORIGINAL"
             and product.weight == Decimal("500.00")
             and product.weight_unit == "g"
-            and product.active is False
         )
         print(
             f"4.import_7000_increased={product.price!r} "

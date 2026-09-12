@@ -258,7 +258,6 @@ def parse_excel_rows(file_bytes: bytes, filename: str) -> ParsedImport:
                 "name": name,
                 "price": price,
                 "last_updated": last_updated or datetime.now(timezone.utc),
-                "active": True,
                 **weight_fields,
             }
         )

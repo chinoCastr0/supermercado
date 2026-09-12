@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(PYTHONPATH=. ./.venv/Scripts/python.exe -m pytest tests -q)"
+    ]
+  }
+}

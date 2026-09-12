@@ -17,8 +17,9 @@ import {
   registerByteLength,
   registerTextError,
 } from "../utils/registerFormat";
-import { normalizeMoneyInput } from "../utils/money";
+import { getPriceChange, normalizeMoneyInput } from "../utils/money";
 import { Modal } from "./Modal";
+import { PriceCalculator } from "./PriceCalculator";
 
 const EMPTY_DRAFT: ProductDraft = {
   barcode: "",
@@ -26,11 +27,11 @@ const EMPTY_DRAFT: ProductDraft = {
   price: "",
   weight: "",
   weight_unit: "g",
-  active: true,
 };
 type Props = {
   product: Product | null;
   initialBarcode?: string;
+  focusCost?: boolean;
   isSaving: boolean;
   onClose: () => void;
   onSave: (payload: ProductPayload, productId?: number) => Promise<boolean>;
@@ -40,6 +41,7 @@ type Props = {
 export function ProductModal({
   product,
   initialBarcode = "",
+  focusCost = false,
   isSaving,
   onClose,
   onSave,
@@ -53,10 +55,10 @@ export function ProductModal({
           price: String(product.price),
           weight: product.weight === null ? "" : String(product.weight),
           weight_unit: product.weight_unit ?? "g",
-          active: product.active,
         }
       : { ...EMPTY_DRAFT, barcode: initialBarcode },
   );
+  const priceChange = product ? getPriceChange(String(product.price), draft.price) : null;
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const error =
@@ -94,7 +96,7 @@ export function ProductModal({
       onClose();
   };
   return (
-    <Modal titleId="product-modal-title" isBusy={isSaving} onClose={onClose}>
+    <Modal titleId="product-modal-title" isBusy={isSaving} onClose={onClose} className="product-modal">
       <div className="modal-header">
         <div>
           <span className="modal-kicker">INVENTARIO</span>
@@ -113,25 +115,9 @@ export function ProductModal({
           </p>
         )}
         <label>
-          Nombre del producto
-          <input
-            autoFocus
-            required
-            maxLength={REGISTER_NAME_BYTES}
-            value={draft.name}
-            onChange={(event) => {
-              setValidationError(null);
-              setDraft({ ...draft, name: event.target.value });
-            }}
-            placeholder="Ej. Yerba mate 1 kg"
-          />
-          <small className="field-hint">
-            {registerByteLength(draft.name)}/{REGISTER_NAME_BYTES} bytes
-          </small>
-        </label>
-        <label>
           Código de barras
           <input
+            autoFocus={!focusCost && !product && !initialBarcode}
             required
             maxLength={REGISTER_BARCODE_BYTES}
             value={draft.barcode}
@@ -146,18 +132,21 @@ export function ProductModal({
           </small>
         </label>
         <label>
-          Precio
+          Nombre del producto
           <input
+            autoFocus={!focusCost && Boolean(product || initialBarcode)}
             required
-            inputMode="decimal"
-            type="text"
-            value={draft.price}
+            maxLength={REGISTER_NAME_BYTES}
+            value={draft.name}
             onChange={(event) => {
               setValidationError(null);
-              setDraft({ ...draft, price: event.target.value });
+              setDraft({ ...draft, name: event.target.value });
             }}
-            placeholder="Ej. 1.234,56"
+            placeholder="Ej. Yerba mate 1 kg"
           />
+          <small className="field-hint">
+            {registerByteLength(draft.name)}/{REGISTER_NAME_BYTES} bytes
+          </small>
         </label>
         <div className="measurement-fields">
           <label>
@@ -192,18 +181,39 @@ export function ProductModal({
             </select>
           </label>
         </div>
-        <label className="switch-row">
-          <span>
-            <strong>Producto activo</strong>
-            <small>Visible y disponible en el inventario</small>
+        <PriceCalculator
+          autoFocusCost={focusCost}
+          onCalculate={(price) => {
+            setValidationError(null);
+            setDraft((current) => ({ ...current, price }));
+          }}
+        />
+        <label>
+          <span className="final-price-heading">
+            <span id="final-price-label">Precio final</span>
+            <small
+              id="final-price-change"
+              className={`price-change ${priceChange?.direction ?? ""}`}
+              role="status"
+              aria-atomic="true"
+            >
+              {priceChange?.label}
+            </small>
           </span>
           <input
-            type="checkbox"
-            checked={draft.active}
-            onChange={(event) =>
-              setDraft({ ...draft, active: event.target.checked })
-            }
+            aria-labelledby="final-price-label"
+            aria-describedby="final-price-change"
+            required
+            inputMode="decimal"
+            type="text"
+            value={draft.price}
+            onChange={(event) => {
+              setValidationError(null);
+              setDraft({ ...draft, price: event.target.value });
+            }}
+            placeholder="Ej. 1.234,56"
           />
+          <small className="field-hint">Podés ajustarlo manualmente antes de guardar.</small>
         </label>
         <div className="modal-actions">
           <button className="button secondary" type="button" onClick={onClose}>

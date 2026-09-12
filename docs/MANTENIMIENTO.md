@@ -177,7 +177,7 @@ puede perder modificaciones legítimas posteriores.
 ## Medición de rendimiento
 
 Usar datasets sintéticos de 1.000, 20.000 y 100.000 productos para consultas;
-la exportación mantiene su límite específico de 20.000 activos. Medir:
+la exportación mantiene su límite específico de 20.000 productos. Medir:
 
 | Flujo | Evidencia | Cambio a comparar |
 | --- | --- | --- |

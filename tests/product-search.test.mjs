@@ -13,13 +13,12 @@ import {
 test("construye una búsqueda combinada con filtros y paginación", () => {
   const query = new URLSearchParams(
     buildProductListQuery(
-      { search: "coca 500 ml", status: "active", printStatus: "pending" },
+      { search: "coca 500 ml", printStatus: "pending" },
       500,
       500,
     ),
   );
   assert.equal(query.get("search"), "coca 500 ml");
-  assert.equal(query.get("active_status"), "active");
   assert.equal(query.get("print_status"), "pending");
   assert.equal(query.get("skip"), "500");
   assert.equal(query.get("limit"), "500");
@@ -43,7 +42,7 @@ test("cambiar o limpiar la búsqueda vuelve a la primera página", () => {
   assert.equal(page, 1);
   const params = new URLSearchParams(
     buildProductListQuery(
-      { search: query, status: "all", printStatus: "all" },
+      { search: query, printStatus: "all" },
       0,
       500,
     ),

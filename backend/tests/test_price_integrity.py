@@ -52,7 +52,6 @@ def test_price_1234_56_remains_exact_from_payload_to_refetch_and_edit() -> None:
         "barcode": "TRACE-1234",
         "name": "Trazabilidad",
         "price": "1234.56",
-        "active": True,
     }
 
     with Session(engine) as db:
@@ -197,7 +196,6 @@ def test_import_only_increases_existing_prices() -> None:
                 price="5300",
                 weight="500",
                 weight_unit="g",
-                active=False,
             ),
             db,
         )
@@ -215,7 +213,6 @@ def test_import_only_increases_existing_prices() -> None:
         assert product.name == "Producto original"
         assert product.weight == Decimal("500.00")
         assert product.weight_unit == "g"
-        assert product.active is False
         assert increased["price_updated_count"] == 1
         assert increased["preserved_price_barcodes"] == []
 
@@ -232,7 +229,6 @@ def test_import_only_increases_existing_prices() -> None:
         assert product.name == "Producto original"
         assert product.weight == Decimal("500.00")
         assert product.weight_unit == "g"
-        assert product.active is False
         assert preserved["price_updated_count"] == 0
         assert preserved["preserved_price_barcodes"] == ["SAFE-IMPORT"]
 

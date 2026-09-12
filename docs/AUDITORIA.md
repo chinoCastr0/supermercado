@@ -129,7 +129,7 @@ borrar productos que otro operador acaba de editar. Historial de precio y
 snapshots sobreviven, como prueban los tests, pero no contienen necesariamente
 todo el estado actual ni un evento de borrado que permita restaurarlo.
 
-**Propuesta:** introducir archivado separado de `active`, con `deleted_at`, actor,
+**Propuesta:** introducir archivado de productos, con `deleted_at`, actor,
 motivo, revisión y restauración; definir si el barcode archivado sigue reservado.
 Separar archivado de purga definitiva con retención y autorización propia.
 Mientras exista borrado físico, exigir revisiones y auditar snapshot completo
@@ -204,8 +204,8 @@ orden consistente y reintento ante deadlocks en su
 En [money.py](../backend/app/money.py), `quantize` se ejecuta antes de verificar
 el máximo de dígitos y queda fuera del `except InvalidOperation`. Un string de
 40 nueves produjo `InvalidOperation`, en lugar de un error de entrada controlado.
-`ProductUpdate` también acepta `price=None`, `name=None`, `barcode=None` y
-`active=None`, aunque sus columnas son NOT NULL. Esos casos terminan en conflictos
+`ProductUpdate` también acepta `price=None`, `name=None` y `barcode=None`,
+aunque sus columnas son NOT NULL. Esos casos terminan en conflictos
 de integridad con un mensaje de barcode duplicado que no describe la causa.
 
 **Propuesta:** comprobar magnitud antes de cuantizar, convertir errores decimales

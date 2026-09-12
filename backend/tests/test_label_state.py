@@ -13,7 +13,6 @@ def product() -> Product:
         price=Decimal("2300"),
         weight=Decimal("500"),
         weight_unit="g",
-        active=True,
         label_version=3,
         printed_label_version=3,
     )
@@ -43,6 +42,6 @@ def test_visible_change_marks_current_version_pending() -> None:
 def test_internal_change_does_not_change_label_state() -> None:
     current = product()
 
-    assert visible_label_changed(current, {"active": False}) is False
+    assert visible_label_changed(current, {"revision": 4}) is False
     assert current.label_version == 3
     assert current.printed_label_version == 3

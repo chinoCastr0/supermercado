@@ -89,7 +89,6 @@ class ProductBase(WeightFields):
     barcode: str = Field(min_length=1, max_length=50)
     name: str = Field(min_length=1, max_length=255)
     price: Money
-    active: bool = True
 
 
 class ProductCreate(ProductBase):
@@ -112,12 +111,11 @@ class ProductUpdate(WeightFields):
     barcode: RegisterBarcode | None = None
     name: RegisterName | None = None
     price: Money | None = None
-    active: bool | None = None
 
     @model_validator(mode="after")
     def reject_explicit_null_on_required_fields(self) -> Self:
         """Distingue "omitido" de "null explícito" para columnas NOT NULL."""
-        for field in ("barcode", "name", "price", "active"):
+        for field in ("barcode", "name", "price"):
             if field in self.model_fields_set and getattr(self, field) is None:
                 raise ValueError(f"{field} no puede ser nulo")
         return self

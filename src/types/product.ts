@@ -12,7 +12,6 @@ export type Product = {
   price: string;
   weight: number | string | null;
   weight_unit: WeightUnit | null;
-  active: boolean;
   revision: number;
   last_updated: string;
   label_version: number;
@@ -26,7 +25,6 @@ export type ProductDraft = {
   price: string;
   weight: string;
   weight_unit: WeightUnit;
-  active: boolean;
 };
 
 export type ProductPayload = Omit<ProductDraft, "weight" | "weight_unit"> & {
@@ -59,12 +57,10 @@ export type BulkDeleteResult = {
   deleted_count: number;
 };
 export type Notice = { kind: "success" | "error"; message: string } | null;
-export type StatusFilter = "all" | "active" | "inactive";
 export type PrintFilter = "all" | "pending" | "printed";
 export type ProductSort = "name" | "price-asc" | "price-desc" | "updated-desc";
 export type ProductListFilters = {
   search: string;
-  status: StatusFilter;
   printStatus: PrintFilter;
 };
 

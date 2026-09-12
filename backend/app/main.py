@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.products import router as products_router
 from app.api.labels import router as labels_router
+from app.api.missing_products import router as missing_products_router
 from app.database import initialize_database
 
 
@@ -52,6 +53,7 @@ app.add_middleware(
 
 app.include_router(products_router)
 app.include_router(labels_router)
+app.include_router(missing_products_router)
 
 
 @app.get("/")

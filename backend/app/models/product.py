@@ -7,7 +7,7 @@ validan fuera de este modelo: Numeric fija precisión, no reglas de negocio."""
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import Boolean, DateTime, Integer, Numeric, String, text
+from sqlalchemy import DateTime, Integer, Numeric, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -47,12 +47,6 @@ class Product(Base):
     weight_unit: Mapped[str | None] = mapped_column(
         String(2),
         nullable=True,
-    )
-
-    active: Mapped[bool] = mapped_column(
-        Boolean,
-        default=True,
-        nullable=False,
     )
 
     revision: Mapped[int] = mapped_column(

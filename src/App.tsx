@@ -3,7 +3,7 @@
  * El hook administra operaciones remotas. La paginación actual es local, sobre
  * todos los resultados descargados. Las selecciones conservan identidades entre filtros.
  */
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 import type { ScannerLookupOutcome } from "./components/BarcodeScanner";
 import { BulkPriceModal } from "./components/BulkPriceModal";
@@ -12,7 +12,8 @@ import {
   LabelPreviewModal,
   type LabelPreview,
 } from "./components/LabelPreviewModal";
-import { Layout } from "./components/Layout";
+import { Layout, type AppView } from "./components/Layout";
+import { MissingProductsView } from "./components/MissingProductsView";
 import { Modal } from "./components/Modal";
 import { NoticeBanner } from "./components/NoticeBanner";
 import { ProductFilters } from "./components/ProductFilters";
@@ -20,12 +21,14 @@ import { ProductModal } from "./components/ProductModal";
 import { ProductsTable } from "./components/ProductsTable";
 import { StatsCards } from "./components/StatsCards";
 import { useProducts } from "./hooks/useProducts";
+import { useBarcodeKeyboard } from "./hooks/useBarcodeKeyboard";
 import type {
   PrintFilter,
   Product,
   ProductSort,
-  StatusFilter,
+  ProductPayload,
 } from "./types/product";
+import { closeProductEditor, saveProductAndReset } from "./utils/productModal";
 import { compareMoney } from "./utils/money";
 import {
   applySearchInput,
@@ -43,22 +46,32 @@ const BarcodeScanner = lazy(() =>
 function App() {
   const inventory = useProducts();
   const loadProducts = inventory.load;
+  const [view, setView] = useState<AppView>("productos");
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [status, setStatus] = useState<StatusFilter>("all");
   const [printStatus, setPrintStatus] = useState<PrintFilter>("all");
-  const [sort, setSort] = useState<ProductSort>("name");
+  const [sort, setSort] = useState<ProductSort>("updated-desc");
   const [page, setPage] = useState(1);
   const [modal, setModal] = useState<
     "product" | "import" | "scanner" | null
   >(null);
   const [editing, setEditing] = useState<Product | null>(null);
   const [newProductBarcode, setNewProductBarcode] = useState("");
+  const [focusProductCost, setFocusProductCost] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const restoreSearchFocus = useRef(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
   const [bulkPriceProducts, setBulkPriceProducts] = useState<Product[] | null>(
     null,
   );
   const [labelPreview, setLabelPreview] = useState<LabelPreview | null>(null);
+
+  useEffect(() => {
+    if (modal === null && restoreSearchFocus.current) {
+      restoreSearchFocus.current = false;
+      searchInputRef.current?.focus({ preventScroll: true });
+    }
+  }, [modal]);
 
   useEffect(
     () => scheduleDebouncedSearch(query, setDebouncedQuery),
@@ -66,8 +79,8 @@ function App() {
   );
 
   useEffect(() => {
-    void loadProducts({ search: debouncedQuery, status, printStatus });
-  }, [debouncedQuery, loadProducts, printStatus, status]);
+    void loadProducts({ search: debouncedQuery, printStatus });
+  }, [debouncedQuery, loadProducts, printStatus]);
 
   // El filtrado ya ocurrió en SQL. Este orden local reemplaza la relevancia del backend.
   const filtered = useMemo(() => {
@@ -97,12 +110,23 @@ function App() {
       setPage(1);
     };
   const closeModal = () => setModal(null);
+  const closeProductModal = () => closeProductEditor({
+    setNewProductBarcode, setFocusProductCost, restoreSearchFocus, closeModal,
+  });
+  const saveProduct = (payload: ProductPayload, productId?: number) =>
+    saveProductAndReset(inventory.save, payload, productId, () => {
+      setQuery("");
+      setDebouncedQuery("");
+      setPage(1);
+    });
   const createProduct = () => {
+    setFocusProductCost(false);
     setEditing(null);
     setNewProductBarcode("");
     setModal("product");
   };
   const editProduct = (product: Product) => {
+    setFocusProductCost(false);
     setEditing(product);
     setNewProductBarcode("");
     setModal("product");
@@ -112,15 +136,27 @@ function App() {
   ): Promise<ScannerLookupOutcome> => {
     const product = await inventory.findByBarcode(barcode);
     if (product === undefined) return "error";
-    if (product === null) return "not-found";
+    if (product === null) {
+      createScannedProduct(barcode);
+      return "not-found";
+    }
     editProduct(product);
+    setFocusProductCost(true);
     return "found";
   };
   const createScannedProduct = (barcode: string) => {
+    setFocusProductCost(false);
     setEditing(null);
     setNewProductBarcode(barcode);
     setModal("product");
   };
+  useBarcodeKeyboard(
+    view === "productos" &&
+      modal === null &&
+      bulkPriceProducts === null &&
+      labelPreview === null,
+    handleScannedBarcode,
+  );
   const pendingFiltered = filtered.filter((product) => !product.printed);
   const availableProductIds = new Set(
     inventory.products.map((product) => product.id),
@@ -255,9 +291,15 @@ function App() {
 
   return (
     <Layout
+      view={view}
+      onNavigate={setView}
       onImport={() => setModal("import")}
-      onRefresh={() => void inventory.load()}
+      onRefresh={() => {
+        if (view === "productos") void inventory.load();
+      }}
     >
+      {view === "faltantes" && <MissingProductsView />}
+      {view === "productos" && (
       <section className="content">
         <div className="page-heading">
           <div>
@@ -387,14 +429,13 @@ function App() {
               </p>
             </div>
             <ProductFilters
+              searchInputRef={searchInputRef}
               query={query}
-              status={status}
               printStatus={printStatus}
               sort={sort}
               onQueryChange={(value) =>
                 applySearchInput(value, setQuery, setPage)
               }
-              onStatusChange={resetPage(setStatus)}
               onPrintStatusChange={resetPage(setPrintStatus)}
               onSortChange={resetPage(setSort)}
             />
@@ -419,14 +460,16 @@ function App() {
           />
         </section>
       </section>
+      )}
       {modal === "product" && (
         <ProductModal
           key={editing?.id ?? `new-${newProductBarcode || "blank"}`}
           product={editing}
           initialBarcode={newProductBarcode}
+          focusCost={focusProductCost}
           isSaving={inventory.isSaving}
-          onClose={closeModal}
-          onSave={inventory.save}
+          onClose={closeProductModal}
+          onSave={saveProduct}
         />
       )}
       {modal === "import" && (
@@ -465,7 +508,6 @@ function App() {
           <BarcodeScanner
             onClose={closeModal}
             onDetected={handleScannedBarcode}
-            onCreateProduct={createScannedProduct}
           />
         </Suspense>
       )}

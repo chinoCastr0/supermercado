@@ -92,3 +92,22 @@ export function compareMoney(left: string, right: string): number {
   const rightCents = BigInt(normalizedRight.replace(".", ""));
   return leftCents < rightCents ? -1 : leftCents > rightCents ? 1 : 0;
 }
+
+/** Diferencia exacta respecto del precio guardado; omite valores inválidos o iguales. */
+export function getPriceChange(previous: string, current: string): {
+  direction: "increase" | "decrease";
+  label: string;
+} | null {
+  const before = normalizeMoneyInput(previous);
+  const after = normalizeMoneyInput(current);
+  if (!before || !after) return null;
+  const difference = BigInt(after.replace(".", "")) - BigInt(before.replace(".", ""));
+  if (difference === 0n) return null;
+  const absolute = difference < 0n ? -difference : difference;
+  const amount = `${absolute / 100n}.${String(absolute % 100n).padStart(2, "0")}`;
+  const formatted = formatMoney(amount).replace("$ ", "$").replace(/,00$/, "");
+  return {
+    direction: difference > 0n ? "increase" : "decrease",
+    label: `${formatted} ${difference > 0n ? "aumentado" : "disminuido"} · Precio anterior: ${formatMoney(before)}`,
+  };
+}

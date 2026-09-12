@@ -1,4 +1,4 @@
-"""Motor SQLAlchemy, sesiones por petición y adaptación aditiva del esquema.
+"""Motor SQLAlchemy, sesiones por petición y adaptación del esquema.
 
 Los controladores deciden cuándo confirmar la transacción; get_db sólo cierra
 la sesión. initialize_database no reemplaza un historial de migraciones versionado."""

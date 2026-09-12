@@ -21,7 +21,6 @@ payload = {
     "barcode": barcode,
     "name": "000 PRICE TRACE",
     "price": frontend_input,
-    "active": True,
 }
 print(f"1.frontend_input={frontend_input!r} type=str")
 print(f"2.api_payload={json.dumps(payload, separators=(',', ':'))}")

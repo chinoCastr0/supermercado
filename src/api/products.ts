@@ -18,37 +18,35 @@ import type {
 } from "../types/product";
 import { buildProductListQuery } from "../utils/productSearch";
 
-const API_URL = (
+export const API_URL = (
   import.meta.env.VITE_API_URL ?? "/api"
 ).replace(/\/$/, "");
 
-/** Interpreta errores FastAPI textuales, de validación o de conflicto estructurado. */
-async function readError(response: Response): Promise<string> {
+/** Extrae el mensaje de un body FastAPI ya leído. */
+export function extractErrorMessage(data: unknown): string {
+  const detail = data && typeof data === "object" && "detail" in data ? data.detail : null;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const messages = detail.map((error: unknown) =>
+      error && typeof error === "object" && "msg" in error ? error.msg : null,
+    ).filter((message): message is string => typeof message === "string" && Boolean(message));
+    if (messages.length) return messages.join(" ");
+  }
+  if (detail && typeof detail === "object" && "message" in detail &&
+      typeof detail.message === "string" && detail.message) return detail.message;
+  return "No se pudo completar la operación.";
+}
+
+export async function readError(response: Response): Promise<string> {
   try {
-    const data = (await response.json()) as {
-      detail?:
-        | string
-        | Array<{ msg?: string }>
-        | { message?: string };
-    };
-    if (typeof data.detail === "string") return data.detail;
-    if (Array.isArray(data.detail)) {
-      const messages = data.detail
-        .map((error) => error.msg)
-        .filter((message): message is string => Boolean(message));
-      if (messages.length) return messages.join(" ");
-    }
-    if (data.detail && "message" in data.detail && data.detail.message) {
-      return data.detail.message;
-    }
-    return "No se pudo completar la operación.";
+    return extractErrorMessage(await response.json());
   } catch {
-    return "No se pudo completar la operación.";
+    return extractErrorMessage(null);
   }
 }
 
 /** Envía la petición y convierte respuestas no exitosas en Error; 204 no tiene JSON. */
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, init);
   if (!response.ok) throw new Error(await readError(response));
   return response.status === 204
@@ -78,6 +76,16 @@ export const productsApi = {
       products.push(...batch);
       if (batch.length < limit) return products;
     }
+  },
+
+  /** Búsqueda acotada para elegir un producto de referencia; nunca recorre todo. */
+  search(term: string, limit = 8): Promise<Product[]> {
+    const params = new URLSearchParams({
+      search: term.trim(),
+      skip: "0",
+      limit: String(limit),
+    });
+    return request<Product[]>(`/products?${params.toString()}`);
   },
 
   /** Distingue ausencia (null) de fallos de red o del servidor. */

@@ -35,7 +35,6 @@ def test_import_updates_existing_and_creates_new_products_in_one_batch() -> None
             price=Decimal("1500"),
             weight=Decimal("500"),
             weight_unit="g",
-            active=False,
             label_version=3,
             printed_label_version=3,
             printed_at=datetime.now(timezone.utc),
@@ -59,7 +58,6 @@ def test_import_updates_existing_and_creates_new_products_in_one_batch() -> None
         assert products[0].name == "Nombre original"
         assert products[0].weight == Decimal("500.00")
         assert products[0].weight_unit == "g"
-        assert products[0].active is False
         assert products[0].label_version == 4
         assert products[0].printed is False
         assert products[1].printed is False

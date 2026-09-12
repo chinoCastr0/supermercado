@@ -24,7 +24,7 @@ el mismo valor al ingresarse, persistirse, mostrarse, imprimirse y exportarse.
 - Alta, consulta, edición y eliminación de productos.
 - Búsqueda manual o mediante cámara por código de barras.
 - Búsqueda backend por nombre, barcode y presentación con debounce.
-- Filtros por estado activo y estado de impresión.
+- Filtros por estado de impresión.
 - Importación masiva desde `.xlsx` y `.csv`.
 - Cambio de precio y eliminación para una selección de productos.
 - Comparación segura de precios durante una importación.
@@ -33,7 +33,7 @@ el mismo valor al ingresarse, persistirse, mostrarse, imprimirse y exportarse.
 - Generación de carteles PDF A4, 24 por página (3 columnas por 8 filas).
 - Reimpresión determinista desde una copia inmutable del lote original.
 - Confirmación segura de carteles impresos.
-- Exportación de productos activos a `PRESUR1.DAT`.
+- Exportación de productos a `PRESUR1.DAT`.
 - Interfaz responsive e instalable como PWA.
 
 ## Reglas que no deben romperse
@@ -75,7 +75,7 @@ Guardado 7000 + importado 6000 -> queda 7000
 Guardado 7000 + importado 7000 -> queda 7000 sin escritura
 ```
 
-En productos existentes, los valores importados de `name`, `active`, `weight`,
+En productos existentes, los valores importados de `name`, `weight`,
 `weight_unit` y `last_updated` se ignoran siempre. Al aumentar el precio sólo
 cambian además metadatos internos necesarios para auditoría, concurrencia y
 estado del cartel.
@@ -195,7 +195,6 @@ supermercado/
 | `name` | Nombre visible y exportable. |
 | `price` | `NUMERIC(12,2)`, positivo y exacto. |
 | `weight`, `weight_unit` | Presentación opcional: `g`, `kg`, `ml`, `l` o `u`. |
-| `active` | Determina si se exporta a la caja. |
 | `revision` | Control optimista para evitar escrituras obsoletas. |
 | `label_version` | Versión vigente de los datos visibles en el cartel. |
 | `printed_label_version` | Versión confirmada como impresa. |
@@ -214,6 +213,15 @@ para que el evento siga siendo interpretable si el producto se elimina.
 
 Representan una generación de carteles y los productos incluidos. Cada item
 guarda la versión visible y el snapshot inmutable usado para crear el PDF.
+
+### `missing_products`
+
+Lista operativa de productos que faltan reponer o comprar. Es independiente del
+catálogo: ninguna operación sobre un faltante modifica `products`. `product_id`
+es una referencia opcional y sin FK (igual que en el historial de precios), por
+lo que un faltante puede existir sin producto cargado y sobrevive a su borrado.
+`quantity` se guarda como texto para conservar expresiones como "media caja".
+`status` es `pending` o `resolved`; al resolver se completa `resolved_at`.
 
 ## Instalación local
 
@@ -276,10 +284,14 @@ y actualizar el mismo valor en ambos `.env`.
 
 ```powershell
 cd backend
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-Para desarrollo puede agregarse `--reload`.
+En desarrollo, `--reload` carga automáticamente los cambios del backend y las
+rutas nuevas. Si la API ya estaba iniciada sin esa opción, detenerla y ejecutar
+el comando anterior: una ruta nueva como `/missing-products` devuelve `404 Not
+Found` mientras siga activo el proceso con el código anterior. En producción,
+omitir `--reload` y reiniciar el servicio después de desplegar cambios.
 
 ### 6. Iniciar React
 
@@ -358,9 +370,13 @@ Detalles relevantes:
 
 ## Búsqueda del inventario
 
+El catálogo no distingue productos por actividad. Antes de iniciar esta versión
+sobre una base existente, retirá la columna obsoleta con la migración explícita
+`backend/migrations/20260912_remove_product_activity.sql` (ver abajo).
+El startup ya no elimina esa columna; se conservan todos los productos.
+
 El buscador principal consulta `GET /products?search=...` después de 300 ms sin
-nuevas pulsaciones. La búsqueda se combina en backend con `active_status`,
-`print_status`, `skip` y `limit`; el frontend pagina visualmente el conjunto
+nuevas pulsaciones. La búsqueda se combina en backend con `print_status`, `skip` y `limit`; el frontend pagina visualmente el conjunto
 completo devuelto por esas condiciones.
 
 Admite coincidencias parciales y case-insensitive por nombre, barcode textual y
@@ -416,12 +432,12 @@ como impresos.
 
 ## Exportación `PRESUR1.DAT`
 
-Se exportan únicamente productos activos. El archivo contiene exactamente
+Se exportan únicamente productos. El archivo contiene exactamente
 20.000 registros de 58 bytes (`1.160.000` bytes en total).
 
 Restricciones:
 
-- Máximo de 20.000 productos activos.
+- Máximo de 20.000 productos.
 - Barcode de hasta 15 bytes CP1252.
 - Nombre validado para la caja y campo binario de 18 bytes CP1252.
 - Sin caracteres de control ni caracteres incompatibles con CP1252.
@@ -430,7 +446,7 @@ Restricciones:
   hueco disponible.
 - El peso se utiliza en carteles, pero no forma parte de este formato.
 
-La exportación falla completa y explícitamente si algún producto activo no puede
+La exportación falla completa y explícitamente si algún producto no puede
 representarse sin pérdida. No se genera un archivo parcialmente corrupto.
 
 ## Escáner y PWA
@@ -461,7 +477,7 @@ Vite.
 | Método | Ruta | Función |
 | --- | --- | --- |
 | `GET` | `/health` | Disponibilidad del backend. |
-| `GET` | `/products` | Lista/busca; acepta `search`, `active_status`, `print_status`, `skip` y `limit`. |
+| `GET` | `/products` | Lista/busca; acepta `search`, `print_status`, `skip` y `limit`. |
 | `POST` | `/products` | Crea un producto y su primer evento de precio. |
 | `GET` | `/products/by-barcode?barcode=...` | Busca el barcode textual exacto. |
 | `GET` | `/products/{id}` | Obtiene un producto. |
@@ -477,6 +493,10 @@ Vite.
 | `POST` | `/labels/generate` | Genera PDF y lote inmutable. |
 | `GET` | `/labels/batches/{id}/pdf` | Reimprime desde el snapshot. |
 | `POST` | `/labels/batches/{id}/confirm` | Confirma las versiones aún vigentes. |
+| `GET` | `/missing-products` | Lista faltantes; acepta `search`, `status`, `skip` y `limit`. |
+| `POST` | `/missing-products` | Anota un faltante; 409 si ya hay uno pendiente para el mismo `product_id`. |
+| `PUT` | `/missing-products/{id}` | Edita nombre, cantidad, nota, vínculo o estado. |
+| `DELETE` | `/missing-products/{id}` | Elimina una anotación. |
 
 Los contratos ejecutables y ejemplos están en `/docs` y `/openapi.json`.
 
@@ -492,6 +512,35 @@ Migraciones de referencia:
 - `backend/migrations/20260827_add_label_printing.sql`: versiones y lotes.
 - `backend/migrations/20260904_price_integrity.sql`: revisión, snapshots e
   historial de precios.
+- `backend/migrations/20260910_add_missing_products.sql`: tabla `missing_products`
+  para la lista de faltantes (aditiva; no toca `products`).
+
+Se conservan migraciones SQL planas, sin un runner automático único.
+La retirada de actividad sigue siendo idempotente (`DROP COLUMN IF EXISTS`).
+Se aplica una vez antes de arrancar workers, con el script independiente que
+lee ese SQL y verifica la ausencia de la columna dentro de la transacción:
+
+```powershell
+cd backend
+$env:PYTHONPATH="."
+.\.venv\Scripts\python.exe scripts\remove_product_activity.py
+```
+
+Para faltantes se agregó `20260912_unique_pending_missing_products.sql` como
+migración separada: también actualiza bases donde la tabla ya fue creada por
+startup. Primero aplicar la migración de tabla, luego el índice (desde la raíz,
+con DATABASE_URL de PostgreSQL configurada para psql):
+
+```powershell
+psql "$env:DATABASE_URL" -v ON_ERROR_STOP=1 -1 -f backend/migrations/20260910_add_missing_products.sql
+psql "$env:DATABASE_URL" -v ON_ERROR_STOP=1 -1 -f backend/migrations/20260912_unique_pending_missing_products.sql
+```
+
+Usar una URL `postgresql://`, sin el sufijo de driver de SQLAlchemy.
+Ejecutar con escrituras detenidas antes del despliegue. Si existen dos pendientes
+para el mismo product_id, el índice falla: revisarlos y resolverlos manualmente;
+la migración no elimina ni combina datos. Ambos comandos son repetibles.
+No basta con create_all para agregar el índice a una tabla existente.
 
 Para aplicar y verificar el esquema de integridad sin modificar precios:
 

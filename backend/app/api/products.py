@@ -109,17 +109,10 @@ def list_products(
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=500),
     print_status: str = Query(default="all", pattern="^(all|pending|printed)$"),
-    active_status: Annotated[
-        str, Query(pattern="^(all|active|inactive)$")
-    ] = "all",
     search: Annotated[str, Query(max_length=200)] = "",
 ) -> list[Product]:
     """Filtra y ordena en SQL; devuelve una página limitada sin total global."""
     statement = select(Product)
-    if active_status == "active":
-        statement = statement.where(Product.active.is_(True))
-    elif active_status == "inactive":
-        statement = statement.where(Product.active.is_(False))
     if print_status == "printed":
         statement = statement.where(
             and_(
@@ -187,9 +180,9 @@ def list_products(
     },
 )
 def export_register_products(db: Session = Depends(get_db)) -> Response:
-    """Descarga todos los productos activos en el formato binario de la caja."""
+    """Descarga todos los productos en el formato binario de la caja."""
     products = db.scalars(
-        select(Product).where(Product.active.is_(True)).order_by(Product.id)
+        select(Product).order_by(Product.id)
     ).all()
 
     try:

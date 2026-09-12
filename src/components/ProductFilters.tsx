@@ -2,31 +2,29 @@
  * Controles de búsqueda, estado y orden administrados por el componente padre.
  * Los cambios se notifican por callbacks; el debounce se aplica fuera del formulario.
  */
+import type { Ref } from "react";
 import type {
   PrintFilter,
   ProductSort,
-  StatusFilter,
 } from "../types/product";
 
 type Props = {
+  searchInputRef?: Ref<HTMLInputElement>;
   query: string;
-  status: StatusFilter;
   printStatus: PrintFilter;
   sort: ProductSort;
   onQueryChange: (value: string) => void;
-  onStatusChange: (value: StatusFilter) => void;
   onPrintStatusChange: (value: PrintFilter) => void;
   onSortChange: (value: ProductSort) => void;
 };
 
 /** Presenta valores controlados y comunica cambios sin consultar datos. */
 export function ProductFilters({
+  searchInputRef,
   query,
-  status,
   printStatus,
   sort,
   onQueryChange,
-  onStatusChange,
   onPrintStatusChange,
   onSortChange,
 }: Props) {
@@ -35,21 +33,14 @@ export function ProductFilters({
       <label className="search">
         <span>⌕</span>
         <input
+          ref={searchInputRef}
+          data-barcode-search
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
           placeholder="Buscar nombre, peso o código..."
           aria-label="Buscar productos"
         />
       </label>
-      <select
-        value={status}
-        onChange={(event) => onStatusChange(event.target.value as StatusFilter)}
-        aria-label="Filtrar por estado"
-      >
-        <option value="all">Todos los estados</option>
-        <option value="active">Activos</option>
-        <option value="inactive">Inactivos</option>
-      </select>
       <select
         value={printStatus}
         onChange={(event) =>

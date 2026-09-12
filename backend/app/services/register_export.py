@@ -102,7 +102,7 @@ def build_presur_file(products: Iterable[ExportableProduct]) -> bytes:
     catalog = list(products)
     if len(catalog) > RECORD_COUNT:
         raise RegisterExportError(
-            f"La caja admite hasta {RECORD_COUNT} productos activos."
+            f"La caja admite hasta {RECORD_COUNT} productos."
         )
 
     used_plus: set[int] = set()
