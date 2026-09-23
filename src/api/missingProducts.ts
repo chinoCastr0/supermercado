@@ -4,7 +4,7 @@
  * El backend valida las reglas de negocio; aquí solo se traduce el 409 de
  * "ya hay un faltante pendiente" a un error tipado con la anotación existente.
  */
-import { API_URL, extractErrorMessage, readError, request } from "./products";
+import { API_URL, authFetch, extractErrorMessage, readError, request } from "./products";
 import type {
   MissingListFilters,
   MissingProduct,
@@ -39,7 +39,7 @@ export const missingProductsApi = {
 
   /** Crea una anotación; el 409 conserva el faltante pendiente ya existente. */
   async create(payload: MissingProductPayload): Promise<MissingProduct> {
-    const response = await fetch(`${API_URL}/missing-products`, {
+    const response = await authFetch(`${API_URL}/missing-products`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),

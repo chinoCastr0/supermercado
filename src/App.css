@@ -143,6 +143,18 @@
   color: var(--purple);
   border-color: #cfc6df;
 }
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.auth-gate {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f6f5f8;
+}
 .mobile-brand {
   display: none;
   color: var(--ink);
@@ -887,6 +899,7 @@ code {
 }
 .product-modal .modal-actions {
   margin-top: 2px;
+  flex-wrap: wrap;
 }
 .final-price-heading {
   display: flex;
@@ -1608,4 +1621,17 @@ code {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+.offer-ticket-modal textarea {
+  width: 100%;
+  min-height: 100px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  resize: vertical;
+}
+.offer-ticket-modal textarea:focus {
+  outline: 2px solid var(--purple-dark);
+  outline-offset: 2px;
 }

@@ -3,6 +3,7 @@
  * Los tipos T son contratos estáticos; request no valida el JSON en ejecución.
  * listAll consume páginas sucesivas de 500 hasta completar los resultados.
  */
+import { getToken } from "@clerk/react";
 import type {
   BatchConfirmation,
   BulkDeleteResult,
@@ -45,9 +46,22 @@ export async function readError(response: Response): Promise<string> {
   }
 }
 
+/** fetch con el token de sesión de Clerk adjunto; usarlo en vez de fetch directo. */
+export async function authFetch(
+  input: string,
+  init?: RequestInit,
+): Promise<Response> {
+  // getToken() explota fuera de un browser con Clerk cargado (p. ej. en los
+  // tests de Node): sin sesión disponible, seguimos sin Authorization.
+  const token = await getToken().catch(() => null);
+  const headers = new Headers(init?.headers);
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  return fetch(input, { ...init, headers });
+}
+
 /** Envía la petición y convierte respuestas no exitosas en Error; 204 no tiene JSON. */
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, init);
+  const response = await authFetch(`${API_URL}${path}`, init);
   if (!response.ok) throw new Error(await readError(response));
   return response.status === 204
     ? (undefined as T)
@@ -90,7 +104,7 @@ export const productsApi = {
 
   /** Distingue ausencia (null) de fallos de red o del servidor. */
   async findByBarcode(barcode: string): Promise<Product | null> {
-    const response = await fetch(
+    const response = await authFetch(
       `${API_URL}/products/by-barcode?barcode=${encodeURIComponent(barcode)}`,
     );
     if (response.status === 404) return null;
@@ -117,7 +131,7 @@ export const productsApi = {
     price: string,
     products: BulkProductRevision[],
   ): Promise<BulkPriceResult> {
-    const response = await fetch(`${API_URL}/products/bulk-price`, {
+    const response = await authFetch(`${API_URL}/products/bulk-price`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ price, products }),
@@ -156,7 +170,7 @@ export const productsApi = {
 
   /** Descarga el binario de caja y libera la URL temporal después del clic. */
   async exportRegister(): Promise<void> {
-    const response = await fetch(`${API_URL}/products/export/register`);
+    const response = await authFetch(`${API_URL}/products/export/register`);
     if (!response.ok) throw new Error(await readError(response));
 
     const url = URL.createObjectURL(await response.blob());
@@ -171,7 +185,7 @@ export const productsApi = {
 
   /** Recupera PDF y metadatos del lote que luego podrá confirmarse. */
   async generateLabels(productIds: number[]): Promise<GeneratedLabels> {
-    const response = await fetch(`${API_URL}/labels/generate`, {
+    const response = await authFetch(`${API_URL}/labels/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ product_ids: productIds }),

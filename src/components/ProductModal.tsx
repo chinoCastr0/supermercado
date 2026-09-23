@@ -20,6 +20,7 @@ import {
 import { getPriceChange, normalizeMoneyInput } from "../utils/money";
 import { Modal } from "./Modal";
 import { PriceCalculator } from "./PriceCalculator";
+import { OfferTicketModal } from "./OfferTicketModal";
 
 const EMPTY_DRAFT: ProductDraft = {
   barcode: "",
@@ -47,6 +48,7 @@ export function ProductModal({
   onSave,
 }: Props) {
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [isOfferOpen, setIsOfferOpen] = useState(false);
   const [draft, setDraft] = useState<ProductDraft>(() =>
     product
       ? {
@@ -95,6 +97,9 @@ export function ProductModal({
     )
       onClose();
   };
+  if (isOfferOpen && product) {
+    return <OfferTicketModal product={product} onClose={() => setIsOfferOpen(false)} />;
+  }
   return (
     <Modal titleId="product-modal-title" isBusy={isSaving} onClose={onClose} className="product-modal">
       <div className="modal-header">
@@ -216,6 +221,8 @@ export function ProductModal({
           <small className="field-hint">Podés ajustarlo manualmente antes de guardar.</small>
         </label>
         <div className="modal-actions">
+          {product && <button className="button secondary" type="button" disabled={isSaving}
+            onClick={() => setIsOfferOpen(true)}>Crear oferta</button>}
           <button className="button secondary" type="button" onClick={onClose}>
             Cancelar
           </button>

@@ -4,6 +4,7 @@
  * La navegación entre secciones es local (sin router): el padre controla `view`.
  */
 import type { ReactNode } from "react";
+import { UserButton } from "@clerk/react";
 
 export type AppView = "productos" | "faltantes";
 
@@ -65,14 +66,17 @@ export function Layout({
             <span className="eyebrow-line" />{" "}
             {view === "faltantes" ? "LISTA DE FALTANTES" : "INVENTARIO GENERAL"}
           </div>
-          <button
-            className="icon-button"
-            type="button"
-            aria-label="Actualizar"
-            onClick={onRefresh}
-          >
-            ↻
-          </button>
+          <div className="topbar-actions">
+            <button
+              className="icon-button"
+              type="button"
+              aria-label="Actualizar"
+              onClick={onRefresh}
+            >
+              ↻
+            </button>
+            <UserButton />
+          </div>
         </header>
         {children}
       </main>

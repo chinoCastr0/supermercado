@@ -1,34 +1,24 @@
 """Composición de FastAPI: rutas, CORS y disponibilidad del proceso.
 
 Importar este módulo ejecuta initialize_database; el arranque tiene efectos DDL.
-No hay autenticación en estas rutas. El health check no consulta PostgreSQL."""
-
-import os
+Las rutas de negocio exigen una sesión de Clerk válida (ver app.auth); `/` y
+`/health` quedan públicas para health checks. El health check no consulta
+PostgreSQL."""
 
 import app.models  # Registra los modelos en Base.metadata antes de inicializar.
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.products import router as products_router
 from app.api.labels import router as labels_router
+from app.api.offers import router as offers_router
 from app.api.missing_products import router as missing_products_router
+from app.auth import require_auth
+from app.config import get_allowed_origins
 from app.database import initialize_database
 
 
 initialize_database()
-
-
-def _allowed_origins() -> list[str]:
-    """Obtiene los orígenes permitidos sin abrir la API a cualquier sitio."""
-    configured = os.getenv(
-        "ALLOWED_ORIGINS",
-        "http://localhost:5173,http://127.0.0.1:5173",
-    )
-    return [
-        origin.strip().rstrip("/")
-        for origin in configured.split(",")
-        if origin.strip()
-    ]
 
 
 app = FastAPI(
@@ -38,7 +28,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_allowed_origins(),
+    allow_origins=get_allowed_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -51,9 +41,11 @@ app.add_middleware(
     ],
 )
 
-app.include_router(products_router)
-app.include_router(labels_router)
-app.include_router(missing_products_router)
+_auth = [Depends(require_auth)]
+app.include_router(products_router, dependencies=_auth)
+app.include_router(labels_router, dependencies=_auth)
+app.include_router(offers_router, dependencies=_auth)
+app.include_router(missing_products_router, dependencies=_auth)
 
 
 @app.get("/")

@@ -4,6 +4,7 @@
  */
 import type { GeneratedLabels } from "../types/product";
 import { Modal } from "./Modal";
+import { PdfPreview } from "./PdfPreview";
 
 export type LabelPreview = GeneratedLabels & {
   url: string;
@@ -24,15 +25,6 @@ export function LabelPreviewModal({
   onClose,
   onConfirm,
 }: Props) {
-  const download = () => {
-    const link = document.createElement("a");
-    link.href = preview.url;
-    link.download = preview.filename;
-    document.body.append(link);
-    link.click();
-    link.remove();
-  };
-
   return (
     <Modal
       titleId="label-preview-title"
@@ -70,15 +62,11 @@ export function LabelPreviewModal({
           </ul>
         </div>
       )}
-      <iframe
-        className="pdf-preview"
-        src={preview.url}
+      <PdfPreview
+        url={preview.url}
+        filename={preview.filename}
         title="Previsualización de carteles de precios"
-      />
-      <div className="modal-actions label-preview-actions">
-        <button className="button secondary" type="button" onClick={download}>
-          Descargar PDF
-        </button>
+      >
         <button
           className="button primary"
           disabled={isSaving}
@@ -87,7 +75,7 @@ export function LabelPreviewModal({
         >
           {isSaving ? "Confirmando…" : "Marcar estos productos como impresos"}
         </button>
-      </div>
+      </PdfPreview>
     </Modal>
   );
 }

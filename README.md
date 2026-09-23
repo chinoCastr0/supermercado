@@ -31,10 +31,28 @@ el mismo valor al ingresarse, persistirse, mostrarse, imprimirse y exportarse.
 - Historial auditable de altas y cambios de precio.
 - Protección frente a ediciones simultáneas y datos desactualizados.
 - Generación de carteles PDF A4, 24 por página (3 columnas por 8 filas).
+- Tickets de oferta PDF A4 apaisada, 4 por página (2 × 2), con guías de corte.
 - Reimpresión determinista desde una copia inmutable del lote original.
 - Confirmación segura de carteles impresos.
 - Exportación de productos a `PRESUR1.DAT`.
 - Interfaz responsive e instalable como PWA.
+
+## Crear oferta
+
+Desde **Editar producto → Crear oferta**, ingresá el texto de la promoción y la
+cantidad de copias; luego elegí **Generar PDF** para previsualizarlo y descargarlo.
+Podés volver a editar la promoción o regresar al borrador del producto.
+El ticket usa los datos guardados: guardá primero los cambios del producto si
+querés que aparezcan en el PDF. El precio por kg/L/unidad corresponde al precio
+guardado; el texto libre de la promoción no recalcula ese valor. Si no hay peso
+y unidad disponibles, ese dato se omite.
+
+`POST /offers/ticket` recibe `{ "product_id": 123, "promo_text": "2x1", "copies": 2 }`
+y devuelve `application/pdf` con nombre de descarga en `Content-Disposition`.
+Se admiten de 1 a 1000 copias y hasta 500 caracteres de promoción no vacía.
+Los productos inexistentes devuelven 404; los datos inválidos o códigos de barras
+no representables devuelven 422. No se crean ofertas persistidas ni lotes de
+impresión, ni se modifica el producto o su estado de impresión.
 
 ## Reglas que no deben romperse
 
