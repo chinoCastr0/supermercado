@@ -1,0 +1,15 @@
+# Solo fuentes y dependencias; excluye secretos, entornos y backups.
+**
+!requirements.txt
+!app/
+!app/**
+!scripts/
+!scripts/**
+!migrations/
+!migrations/**
+**/__pycache__/
+**/*.pyc
+**/.env
+**/.env.*
+**/*.pem
+**/*.key

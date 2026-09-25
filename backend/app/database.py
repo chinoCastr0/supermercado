@@ -3,24 +3,21 @@
 Los controladores deciden cuándo confirmar la transacción; get_db sólo cierra
 la sesión. initialize_database no reemplaza un historial de migraciones versionado."""
 
-import os
 from collections.abc import Generator
 
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
+from app.config import get_database_url
+
 # Carga variables locales en desarrollo; producción puede inyectarlas sin `.env`.
 load_dotenv()
 
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL = get_database_url()
 
-if not DATABASE_URL:
-    raise RuntimeError("No se encontró DATABASE_URL en el archivo .env")
-
-
-engine = create_engine(DATABASE_URL)
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 
 SessionLocal = sessionmaker(
     bind=engine,

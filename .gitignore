@@ -24,6 +24,23 @@ backend/.venv/
 .env.*
 !.env.example
 !**/.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+backups/
+backup/
+*.dump
+*.backup
+*.bak
+*.sql.gz
+*.sql.zip
+.ssh/
+id_rsa*
+id_ed25519*
+id_ecdsa*
+id_dsa*
+*.ppk
 
 # Editor directories and files
 .vscode/*

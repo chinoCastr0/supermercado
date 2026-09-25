@@ -1,21 +1,44 @@
-# IMPORTANCIA: levanta la base PostgreSQL local usada por el backend.
-# PATRÓN: Infrastructure as Code; describe infraestructura reproducible.
-# SOLUCIÓN ESPECÍFICA: puerto y volumen de desarrollo; las credenciales viven
-# en el .env raíz (ignorado por Git, ver .env.example), nunca hardcodeadas
-# acá. Un .env commiteado con una contraseña real es justamente cómo se filtró
-# una credencial en el historial de este repo (ver docs/AUDITORIA.md, A16).
 services:
   database:
     image: postgres:17
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:?Definí POSTGRES_DB en un .env local, ver .env.example}
-      POSTGRES_USER: ${POSTGRES_USER:?Definí POSTGRES_USER en un .env local, ver .env.example}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Definí POSTGRES_PASSWORD en un .env local, ver .env.example}
-    ports:
-      - "5433:5432"
+      POSTGRES_DB: ${POSTGRES_DB:?Defini POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?Defini POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defini POSTGRES_PASSWORD}
     volumes:
-      # El volumen conserva los datos aunque el contenedor sea recreado.
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST: database
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:?Defini POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?Defini POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defini POSTGRES_PASSWORD}
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:?Defini CLERK_SECRET_KEY}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:?Defini ALLOWED_ORIGINS}
+    depends_on:
+      database:
+        condition: service_healthy
+    ports:
+      # Acceso mediante proxy HTTPS instalado en el VPS.
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).close()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
 
 volumes:
   postgres_data:
