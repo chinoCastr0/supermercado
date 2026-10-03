@@ -1,4 +1,6 @@
 # Logs
+# Archivos operativos locales: pueden contener datos de conexión y nunca se publican.
+/tmp/
 logs
 *.log
 npm-debug.log*
@@ -29,6 +31,8 @@ backend/.venv/
 *.p12
 *.pfx
 backups/
+certbot/conf/
+certbot/www/
 backup/
 *.dump
 *.backup
