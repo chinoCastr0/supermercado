@@ -7,13 +7,23 @@ Acceso SSH: `ssh -p 5422 chino@149.34.226.101`.
 
 ## Auditoría y condición previa
 
-Al 2026-10-03, HEAD local es `0359270`. Los cambios HTTPS están sólo en el working
-tree, incluidos archivos nuevos sin rastrear; no se hizo commit ni push. **Un git
-pull no los transportará hasta que los publiques por tu procedimiento habitual.**
-Antes de seguir, llevar al VPS todos los archivos de infraestructura de esta
-entrega, incluido `scripts/check-deploy-config.py`. No transferir `.env`, `tmp/`,
-backups ni certificados desde la PC. No se inspeccionaron secretos reales ni se
-ejecutaron cambios por SSH durante esta auditoría.
+Actualización del 2026-10-03: la infraestructura se publicó en `main` mediante el
+commit `bff8c24` y el VPS ya hizo pull. No transferir `.env`, `tmp/`, backups ni
+certificados desde la PC. Las credenciales no se imprimieron ni se cambiaron.
+
+La auditoría por SSH encontró PostgreSQL y backend saludables, sin nginx/Certbot,
+80/443 libres y permitidos en UFW. Se corrigieron sólo API_SERVER_NAME y
+ALLOWED_ORIGINS en el `.env` del VPS, que conservaba el dominio viejo de Vercel.
+Los tres dumps existentes se verificaron con pg_restore y hashes sin cambios;
+el contenedor y volumen PostgreSQL se preservaron. La imagen nueva del backend
+se construyó, pero el contenedor aún no se recreó en esta etapa.
+
+Para completar el despliegue falta el correo LETSENCRYPT_EMAIL del administrador.
+También se detectó que el frontend publicado incluye una clave Clerk live, pero
+la clave configurada en el backend no tiene prefijo sk_live_. El administrador
+debe configurar directamente en el VPS la clave de la misma instancia live, sin
+compartirla por chat ni rotar claves. El verificador de producción detiene el
+despliegue mientras esa diferencia exista. Nunca copiar claves a este documento.
 
 DNS A comprobado: `149.34.226.101`. Las conexiones públicas a 80 y 443 fallaron
 desde el entorno de auditoría, incluso fuera del sandbox. Esto es compatible con
@@ -250,6 +260,7 @@ Referencias: [Compose start](https://docs.docker.com/reference/cli/docker/compos
 - 6 tests del verificador de configuración aprobados: producción, CORS, exposición
   de puertos, identidad del volumen y ausencia de secretos en los errores.
 - `bash -n scripts/init-letsencrypt.sh` y `git diff --check` aprobados.
-- Docker y ShellCheck ausentes: Compose config y nginx -t en contenedor no pudieron
-  ejecutarse localmente. Deben ejecutarse en el VPS antes de darlo por desplegado.
+- Docker y ShellCheck ausentes en la PC. En el VPS se aprobaron Compose config
+  con .env.example, nginx -t en nginx:1.28-alpine con certificado temporal,
+  los 6 tests del verificador y el build Linux del backend. ShellCheck sigue ausente.
 - No se validó emisión/renovación real de Let's Encrypt ni sesión real de Clerk.
