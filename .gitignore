@@ -31,6 +31,8 @@ backend/.venv/
 *.p12
 *.pfx
 backups/
+# Todo el árbol es estado privado de Certbot; puede tener permisos sólo para root.
+/certbot/
 certbot/conf/
 certbot/www/
 backup/

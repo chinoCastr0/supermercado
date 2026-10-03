@@ -7,28 +7,30 @@ Acceso SSH: `ssh -p 5422 chino@149.34.226.101`.
 
 ## Auditoría y condición previa
 
-Actualización del 2026-10-03: la infraestructura se publicó en `main` mediante el
-commit `bff8c24` y el VPS ya hizo pull. No transferir `.env`, `tmp/`, backups ni
-certificados desde la PC. Las credenciales no se imprimieron ni se cambiaron.
+Despliegue completado el 2026-10-03: API pública disponible mediante HTTPS.
+La infraestructura se publicó inicialmente en `main` mediante `bff8c24` y el VPS
+se actualizó. No transferir `.env`, `tmp/`, backups ni certificados desde la PC.
+Las credenciales no se imprimieron ni se versionaron.
 
-La auditoría por SSH encontró PostgreSQL y backend saludables, sin nginx/Certbot,
-80/443 libres y permitidos en UFW. Se corrigieron sólo API_SERVER_NAME y
-ALLOWED_ORIGINS en el `.env` del VPS, que conservaba el dominio viejo de Vercel.
-Los tres dumps existentes se verificaron con pg_restore y hashes sin cambios;
-el contenedor y volumen PostgreSQL se preservaron. La imagen nueva del backend
-se construyó, pero el contenedor aún no se recreó en esta etapa.
+La causa de la falta de acceso público era que nginx/Certbot no estaban desplegados.
+PostgreSQL y backend estaban saludables; 80/443 estaban libres y permitidos en UFW.
+Además, ALLOWED_ORIGINS conservaba el dominio viejo de Vercel y la clave Clerk
+del backend no era live. Se actualizaron las variables públicas del dominio y
+el correo autorizado; el administrador configuró personalmente la clave live
+en el VPS. El verificador de producción pasó después de esa actualización.
 
-Para completar el despliegue falta el correo LETSENCRYPT_EMAIL del administrador.
-También se detectó que el frontend publicado incluye una clave Clerk live, pero
-la clave configurada en el backend no tiene prefijo sk_live_. El administrador
-debe configurar directamente en el VPS la clave de la misma instancia live, sin
-compartirla por chat ni rotar claves. El verificador de producción detiene el
-despliegue mientras esa diferencia exista. Nunca copiar claves a este documento.
+Se recreó únicamente backend y se agregaron nginx y Certbot. El contenedor y
+volumen PostgreSQL conservaron su identidad, el conteo de productos no cambió
+y los tres dumps existentes conservaron sus hashes tras verificarlos con pg_restore.
+Backend y nginx están saludables; Certbot está en ejecución.
 
-DNS A comprobado: `149.34.226.101`. Las conexiones públicas a 80 y 443 fallaron
-desde el entorno de auditoría, incluso fuera del sandbox. Esto es compatible con
-nginx ausente/detenido, puertos no publicados o firewall; no demuestra cuál es
-la causa en el VPS. No hubo respuesta HTTP que permita atribuirlo a CORS o Clerk.
+DNS A comprobado: `149.34.226.101`, sin AAAA publicado. Se emitió el certificado
+real después del ensayo de staging, válido hasta 2027-01-01. La renovación
+simulada pasó. Desde fuera del VPS se verificaron HTTP 301, HTTPS /health 200,
+/products sin token o con token malformado 401 y preflight del frontend 200 con
+un único Access-Control-Allow-Origin. Un origen ajeno devuelve 400 sin ese header.
+Los redirects del backend conservan HTTPS y nginx rechaza Host/SNI desconocidos.
+Queda por probar una sesión real del usuario desde el frontend.
 
 Arquitectura revisada: nginx proxy a `http://backend:8000` sin reescritura;
 backend conecta a `database:5432` por la red Compose, usando POSTGRES_DB/USER/PASSWORD
@@ -182,7 +184,12 @@ y CLERK_SECRET_KEY actuales. El nombre real de CORS es ALLOWED_ORIGINS, no CORS_
 
 ### Renovación imprescindible
 
-Certbot renueva cada 12 h. Agregar con `sudo crontab -e` una recarga cada 6 h:
+Certbot renueva cada 12 h. Este VPS ya tiene la recarga cada 6 h instalada en
+`/etc/cron.d/supermercado-nginx-reload`, con usuario root y `-p supermercado`.
+El servicio cron está activo. No duplicarla en root crontab.
+
+Para una instalación nueva, como alternativa a ese archivo, agregar con
+`sudo crontab -e` una recarga cada 6 h:
 
 ```cron
 0 */6 * * * cd /opt/apps/supermercado && /usr/bin/docker compose exec -T nginx nginx -t && /usr/bin/docker compose exec -T nginx nginx -s reload
@@ -263,4 +270,8 @@ Referencias: [Compose start](https://docs.docker.com/reference/cli/docker/compos
 - Docker y ShellCheck ausentes en la PC. En el VPS se aprobaron Compose config
   con .env.example, nginx -t en nginx:1.28-alpine con certificado temporal,
   los 6 tests del verificador y el build Linux del backend. ShellCheck sigue ausente.
-- No se validó emisión/renovación real de Let's Encrypt ni sesión real de Clerk.
+- En el VPS también pasaron Compose config y el verificador con la configuración
+  efectiva, la emisión real de Let's Encrypt y el ensayo renew --dry-run.
+  Se comprobaron health interno, SELECT 1, auth importada, HTTPS público, CORS,
+  rechazos sin token/token inválido, Host/SNI desconocido y persistencia de la base.
+- No se probó una sesión real del usuario de Clerk desde el frontend.
