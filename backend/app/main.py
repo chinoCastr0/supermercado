@@ -1,7 +1,8 @@
 """Composición de FastAPI: rutas, CORS y disponibilidad del proceso.
 
 Importar este módulo ejecuta initialize_database; el arranque tiene efectos DDL.
-Las rutas de negocio exigen una sesión de Clerk válida (ver app.auth); `/` y
+Las rutas de negocio exigen una sesión de Clerk válida con organización activa
+y el permiso de cada endpoint (ver app.auth); `/` y
 `/health` quedan públicas para health checks. El health check no consulta
 PostgreSQL."""
 
@@ -13,7 +14,7 @@ from app.api.products import router as products_router
 from app.api.labels import router as labels_router
 from app.api.offers import router as offers_router
 from app.api.missing_products import router as missing_products_router
-from app.auth import require_auth
+from app.auth import get_auth_context
 from app.config import get_allowed_origins
 from app.database import initialize_database
 
@@ -41,7 +42,9 @@ app.add_middleware(
     ],
 )
 
-_auth = [Depends(require_auth)]
+# Base para todo router de negocio: sesión válida y organización activa. Cada
+# endpoint agrega además require_permission(...) según su acción.
+_auth = [Depends(get_auth_context)]
 app.include_router(products_router, dependencies=_auth)
 app.include_router(labels_router, dependencies=_auth)
 app.include_router(offers_router, dependencies=_auth)
