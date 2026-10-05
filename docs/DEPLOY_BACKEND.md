@@ -325,7 +325,8 @@ En producción (2026-10-05) ya están hechos los pasos 0–3: Organizations y
 slugs habilitados, los seis permisos creados y asignados a admin y member.
 `clerk enable orgs` deja *Membership required* activado por defecto; conviene
 desactivarlo hasta desplegar el frontend nuevo y activarlo en el deploy.
-Falta crear la organización inicial (paso 5).
+La organización inicial (paso 5) es `org_3KIQfIfAwaqduAqpzqI7if77nm9`, con
+`leandrodaniel3786@gmail.com` como `org:admin`.
 
 Pasos para producción con el CLI de Clerk (`clerk link` ya apunta a la app
 "Supermercado"). En Git Bash anteponer `MSYS_NO_PATHCONV=1` y redirigir
