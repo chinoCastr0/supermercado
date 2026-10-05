@@ -5,18 +5,31 @@ de ausencia de defectos; consultar [AUDITORIA.md](AUDITORIA.md) para evidencia,
 límites y propuestas. Las dependencias descargadas, binarios compilados y datos
 de configuración privados no forman parte del código comentado.
 
+## Modelo de organizaciones
+
+Multi-organización con Clerk Organizations. Clerk administra usuarios, organizaciones, roles y permisos. El backend recibe el
+`AuthContext` del session token y filtra **toda** consulta por `organization_id`.
+Un id de otra organización responde 404. Cada endpoint exige su permiso
+personalizado (`org:products:*`, `org:prices:edit`, `org:labels:print`,
+`org:missing:manage`, `org:export:register`). El frontend sólo oculta acciones,
+y el backend vuelve a validar cada permiso. La tabla completa de roles, los pasos en Clerk y el
+runbook de migración están en [DEPLOY_BACKEND.md](DEPLOY_BACKEND.md#organizaciones-de-clerk-multi-organización).
+
 ## Backend
 
 | Archivo | Responsabilidad y punto de mantenimiento |
 | --- | --- |
 | `backend/app/main.py` | Composición de rutas/CORS; arranque con DDL y health sin DB (A01/A06) |
-| `backend/app/database.py` | Motor, sesión y adaptación del esquema; separar migración de runtime |
+| `backend/app/auth.py` | `AuthContext` desde el token v2 de Clerk; 401/403; `require_permission` y `ensure_permission` |
+| `backend/app/permissions.py` | Constantes de permisos; deben coincidir con Clerk y `src/utils/permissions.ts` |
+| `backend/app/tenancy.py` | `get_owned`: búsqueda por id acotada a la organización (404 si es ajena) |
+| `backend/app/database.py` | Motor, sesión y adaptación del esquema; falla si falta la migración de organizaciones |
 | `backend/app/money.py` | Parser decimal y convención de separadores; controlar magnitudes (A08) |
 | `backend/app/api/products.py` | CRUD, búsqueda, lotes, importación y exportación; extraer casos de uso |
 | `backend/app/api/labels.py` | Snapshots, PDF, marcado y confirmación; revisar transacciones (A07/A12) |
 | `backend/app/models/__init__.py` | Registra todos los modelos en metadata por importación |
 | `backend/app/models/product.py` | Catálogo, revisiones y versión impresa; faltan CHECK de dominio |
-| `backend/app/models/price_change.py` | Historial sin FK destructiva al catálogo; falta actor e inmutabilidad |
+| `backend/app/models/price_change.py` | Historial sin FK al catálogo; `changed_by` es el actor (NULL en datos previos); falta inmutabilidad |
 | `backend/app/models/print_batch.py` | Lotes y snapshots, incluidas columnas nulas de compatibilidad |
 | `backend/app/schemas/product.py` | DTOs Pydantic; validar null y estado final de modificaciones parciales |
 | `backend/app/services/__init__.py` | Exportación del parser; importar el paquete carga pandas |
@@ -41,6 +54,9 @@ y bloques relevantes, sin contabilizar callbacks triviales como funciones públi
 | `src/main.tsx` | Montaje de React y registro del worker sólo en producción |
 | `src/App.tsx` | Composición, selección, orden y modales; paginación local y acciones tardías |
 | `src/hooks/useProducts.ts` | Estado remoto y comandos; distinguir invalidación de cancelación |
+| `src/components/AuthGate.tsx` | Sesión → organización (tarea o lista) → app remontada por `orgId` |
+| `src/hooks/usePermissions.ts` | Capacidades desde `has({ permission })` de Clerk |
+| `src/utils/permissions.ts` | Permisos, acceso al formulario y mensajes de 403; lógica pura testeada |
 | `src/api/products.ts` | Transporte HTTP, error y descarga; tipos no validan JSON en runtime |
 | `src/types/product.ts` | Contratos del frontend; sincronizar con los DTOs del backend |
 | `src/utils/money.ts` | Dinero textual y centavos BigInt; mantener contrato con Python |
@@ -52,7 +68,7 @@ y bloques relevantes, sin contabilizar callbacks triviales como funciones públi
 | `src/components/BulkPriceModal.tsx` | Precio absoluto, vista previa y confirmación con revisiones congeladas |
 | `src/components/ImportModal.tsx` | Archivo y feedback; el servidor impone los límites |
 | `src/components/LabelPreviewModal.tsx` | Previsualización y descarga separadas de confirmación |
-| `src/components/Layout.tsx` | Navegación; mensaje de conexión actualmente estático |
+| `src/components/Layout.tsx` | Navegación y `OrganizationSwitcher`; mensaje de conexión actualmente estático |
 | `src/components/Modal.tsx` | Contenedor ARIA y cierres; faltan foco y bloqueo de todos los botones |
 | `src/components/NoticeBanner.tsx` | Presentación de resultados, sin operaciones remotas |
 | `src/components/ProductFilters.tsx` | Inputs controlados; no ejecuta consultas |
@@ -61,7 +77,7 @@ y bloques relevantes, sin contabilizar callbacks triviales como funciones públi
 | `src/components/StatsCards.tsx` | Indicadores de la colección recibida, no necesariamente globales |
 | `src/App.css` | Tokens, componentes, estados y responsive; dividir por feature al crecer |
 | `src/index.css` | Reset y fuente externa; considerar fuente local para offline |
-| `public/service-worker.js` | Caché de interfaz, sin inventario; revisar actualizaciones y alcance de borrado |
+| `public/service-worker.js` | Caché de interfaz, sin inventario ni respuestas de API (nada por organización) |
 
 Los módulos y funciones declaradas de TS/JS tienen comentarios de contrato.
 Callbacks locales breves conservan nombres explícitos; se comentaron especialmente
@@ -82,7 +98,11 @@ selección, revisiones, ciclo de carga y recursos para no duplicar cada instrucc
 | `backend/tests/test_label_state.py` | Campos visibles y transición a pendiente |
 | `backend/tests/test_label_pdf.py` | Contenido, geometría y paginación PDF |
 | `backend/tests/test_register_export.py` | Bytes, orden, límites y exactitud de centavos en caja |
+| `backend/tests/test_auth.py` | Claims v2, 401, 403 sin organización y por permiso |
+| `backend/tests/test_organization_isolation.py` | Aislamiento A/B en cada endpoint, barcode por org, permisos por HTTP |
+| `backend/tests/test_organizations_migration.py` | Migración sobre PostgreSQL con datos previos (requiere `TEST_POSTGRES_URL`) |
 | `tests/money.test.mjs` | Normalización, rechazo y orden monetario |
+| `tests/permissions.test.mjs` | Gating de la UI por rol y mensajes de 403 |
 | `tests/bulk-price.test.mjs` | Vista previa y transición de confirmación |
 | `tests/product-search.test.mjs` | Query string, debounce y página inicial |
 
@@ -104,6 +124,8 @@ las regresiones: reproduce defectos actuales, no exige perpetuarlos.
 | `backend/scripts/generate_sample_labels.py` | Ejemplos PDF de paginación; sobrescribe destino |
 | `backend/scripts/render_pdf_pages.py` | Renderiza PNGs en destino; sobrescribe nombres iguales |
 | `scripts/generate-pwa-icons.ps1` | Genera y reemplaza iconos PNG con System.Drawing |
+| `backend/scripts/migrate_organizations.py` | Aplica la migración de organizaciones en una transacción; `--dry-run` revierte |
+| `backend/scripts/verify_organizations_migration.py` | Sólo lectura: snapshot de conteos y verificación posterior |
 
 Los scripts originales con sentencias al nivel de módulo se ejecutan al importar.
 Propuesta: CLI con `main`, argumentos validados y contexto de base explícito.
@@ -114,6 +136,7 @@ Propuesta: CLI con `main`, argumentos validados y contexto de base explícito.
 | --- | --- |
 | `backend/migrations/20260827_add_label_printing.sql` | Tablas/versiones de carteles; no incluye snapshots posteriores |
 | `backend/migrations/20260904_price_integrity.sql` | Revisión, snapshots e historial; migración aditiva |
+| `backend/migrations/20261003_add_organizations.sql` | `organization_id`, `changed_by` e índices únicos por organización; lee `app.bootstrap_organization_id` |
 | `backend/requirements.txt` | Dependencias fijadas, runtime y herramientas mezcladas; faltan tests |
 | `backend/.env.example` | Ejemplo público, DATABASE_URL obligatoria; DB_* es referencia sin implementación |
 | `docker-compose.yml` | PostgreSQL 17 y volumen local; no configura backups ni aislamiento de red |
@@ -141,6 +164,8 @@ Desde la raíz, con el entorno Python del proyecto disponible:
 $env:DATABASE_URL = 'sqlite:///:memory:'
 $env:PYTHONPATH = 'backend'
 $env:PYTHONDONTWRITEBYTECODE = '1'
+# Opcional: migración real sobre un PostgreSQL descartable (ver test_organizations_migration.py).
+# $env:TEST_POSTGRES_URL = 'postgresql://postgres:test@127.0.0.1:55432/test'
 & backend/.venv/Scripts/python.exe -B -m pytest backend/tests -q -p no:cacheprovider
 & backend/.venv/Scripts/python.exe -B backend/scripts/audit_edge_cases.py
 npm.cmd run test:frontend

@@ -144,6 +144,7 @@ seguir produciendo 502. No se comprimen PDFs.
    API_SERVER_NAME=api.supermercado.leacastro.dev
    LETSENCRYPT_EMAIL=admin@TU-DOMINIO.com
    ALLOWED_ORIGINS=https://supermercado.leacastro.dev
+   BOOTSTRAP_ORGANIZATION_ID=org_...   # ver «Organizaciones de Clerk»
    ```
 
    ALLOWED_ORIGINS debe incluir el dominio de Vercel sin barra final; separar
@@ -233,6 +234,181 @@ pero no escribe access log. Hosts desconocidos reciben 444 en HTTP y rechazo de
 handshake en HTTPS. Referencias: [proxy nginx](https://nginx.org/en/docs/http/ngx_http_proxy_module.html),
 [TLS nginx](https://nginx.org/en/docs/http/ngx_http_ssl_module.html) y
 [Certbot y renovación](https://eff-certbot.readthedocs.io/en/stable/using.html).
+
+## Organizaciones de Clerk (multi-organización)
+
+### Modelo
+
+Cada negocio es una **organización de Clerk**. Clerk es la única fuente de
+usuarios, organizaciones, membresías y roles: no hay tablas locales de usuarios
+ni de organizaciones. Las tablas `products`, `product_price_changes`,
+`print_batches` y `missing_products` guardan `organization_id` (`org_...`,
+`VARCHAR(64) NOT NULL`, indexado). `print_batch_items` la hereda de su lote
+(FK `batch_id`). El código de barras es único por organización
+(`uq_products_organization_barcode`) y el faltante pendiente por producto
+también (`uq_missing_products_org_pending_product`). `product_price_changes.changed_by`
+guarda el `user_...` que hizo el cambio; es NULL en el historial previo a la migración.
+
+Cada request lleva el session token v2 de Clerk. `app.auth.get_auth_context`
+arma un `AuthContext` (`user_id`, `org_id`, `org_role`, `permissions`) con los
+claims `o.id`, `o.rol` y los permisos que el SDK decodifica desde `o.per`,
+`o.fpm` y `fea`. Las respuestas son:
+
+- **401**: sesión inválida.
+- **403 `organization_required`**: no hay organización activa.
+- **403 `unsupported_token`**: token v1.
+- **403 `permission_denied`**: falta el permiso del endpoint.
+- **404**: id de otra organización, igual que uno inexistente.
+
+Los permisos `org:sys_*` no viajan en el token: el backend exige sólo
+permisos personalizados.
+
+### Roles y permisos
+
+| Permiso | Habilita | admin | encargado | member |
+| --- | --- | :-: | :-: | :-: |
+| `org:products:read` | Listar, buscar, detalle, historial, carteles pendientes | ✓ | ✓ | ✓ |
+| `org:products:manage` | Alta, edición sin precio, borrado, importar Excel | ✓ | ✓ | – |
+| `org:prices:edit` | Cambio de precio individual o masivo; subas por importación | ✓ | ✓ | – |
+| `org:labels:print` | Generar, reimprimir y confirmar carteles; marcar impreso; ticket de oferta | ✓ | ✓ | ✓ |
+| `org:missing:manage` | Ver, crear, editar, resolver y borrar faltantes | ✓ | ✓ | ✓ |
+| `org:export:register` | Exportar PRESUR1.DAT para la caja | ✓ | ✓ | – |
+| `org:sys_memberships:manage` y demás `sys_*` | Invitar, cambiar roles y quitar miembros; perfil de la org | ✓ | – | – |
+| `org:sys_memberships:read` | Ver la lista de miembros | ✓ | ✓ | ✓ |
+
+Una importación que sube precios existentes exige `products:manage` **y**
+`prices:edit`; sin el segundo no se aplica ninguna fila. El precio inicial de
+un alta sólo exige `products:manage`. Las constantes viven en
+`backend/app/permissions.py` y `src/utils/permissions.ts`.
+
+### Configuración en Clerk
+
+Configuración de la instancia, igual en desarrollo y producción:
+
+- **Organizations** habilitado, con *Membership required*
+  (`force_organization_selection: true`) y slugs habilitados
+  (`slug_disabled: false`).
+- **Role set** `role_set:default`: creator role `org:admin` y default role
+  `org:member`. Incluye `org:encargado`.
+- **Session token v2**: es el formato por defecto en instancias nuevas.
+  Comprobarlo con un token real (claim `v: 2`).
+
+Desarrollo ya está configurado (2026-10-03). Allí la organización "Leandro
+Supermercado" es `org_3KCqHeTYeiYJ3KTHOXRtNhIjIW9` y su admin es
+`leandrodaniel3786@gmail.com`. **Producción está pendiente** y requiere
+confirmación explícita.
+
+Pasos para producción con el CLI de Clerk (`clerk link` ya apunta a la app
+"Supermercado"). En Git Bash anteponer `MSYS_NO_PATHCONV=1` y redirigir
+`< /dev/null`; ejecutar siempre primero con `--dry-run`:
+
+```bash
+# 0. Verificar la configuración actual.
+clerk config pull --instance prod > /tmp/prod-config.json
+# 1. Organizations + Membership required + slugs (revisar el diff del dry-run).
+clerk enable orgs --instance prod --dry-run
+echo '{"organization_settings":{"slug_disabled":false}}' > /tmp/patch.json
+clerk config patch --instance prod --file /tmp/patch.json --dry-run
+# 2. Permisos personalizados (repetir para los seis keys de la tabla).
+clerk api /organization_permissions --instance prod -X POST \
+  -d '{"name":"Ver productos","key":"org:products:read","description":"..."}'
+# 3. Asignar permisos a los roles existentes (ids con: clerk api /organization_roles --instance prod).
+clerk api /organization_roles/<role_id>/permissions/<perm_id> --instance prod -X POST -d '{}'
+# 4. Rol encargado dentro del role set inicial.
+clerk api /organization_roles --instance prod -X POST -d '{"name":"Encargado",
+  "key":"org:encargado","permissions":["<perm_ids...>","<perm sys_memberships:read>"],
+  "include_in_initial_role_set":true}'
+# 5. Organización inicial con el usuario de producción como creador (queda org:admin).
+clerk api '/users?email_address=leandrodaniel3786@gmail.com' --instance prod
+clerk api /organizations --instance prod -X POST \
+  -d '{"name":"Leandro Supermercado","slug":"leandro-supermercado","created_by":"user_..."}'
+# 6. Verificar el rol y los permisos del admin.
+clerk api /organizations/<org_id>/memberships --instance prod
+```
+
+Equivalente en el Dashboard, si no se usa el CLI:
+
+1. **Organizations → Settings**: Enable, Membership required, Allow slugs.
+2. **Roles & Permissions → Permissions**: crear los seis permisos de la tabla.
+3. **Roles**: editar Admin y Member, y crear Encargado
+   (`org:encargado`) con los permisos de la tabla.
+4. **Role sets**: comprobar que el creator role sea Admin y el default role
+   Member.
+5. **Organizations → Create**: "Leandro Supermercado", slug
+   `leandro-supermercado`, con el usuario como admin.
+
+El límite de miembros por organización está en 5 (`max_allowed_memberships`);
+ampliarlo con `clerk config patch` si hace falta. Con Billing deshabilitado los
+permisos no dependen de Features.
+
+### Runbook: migración de datos en el VPS
+
+Requiere el OK explícito del responsable. Se ejecuta antes de que el backend
+nuevo arranque, porque éste se niega a iniciar sobre una base sin columnas de
+organización (`initialize_database` falla y explica qué hacer).
+La migración es `migrations/20261003_add_organizations.sql`, ejecutada por
+`scripts.migrate_organizations`. Corre en **una** transacción: toma los
+conteos, completa `organization_id` sólo donde es NULL, aplica `SET NOT NULL`,
+reemplaza los índices únicos y verifica antes del commit. Si algo no cuadra,
+hace rollback. Es idempotente. Presupone el esquema de la versión anterior,
+con las cinco tablas existentes.
+
+```bash
+cd /opt/apps/supermercado
+git pull origin main
+set -euo pipefail
+# 1. Agregar al .env (sin reemplazarlo) el org_... de PRODUCCIÓN:
+#    BOOTSTRAP_ORGANIZATION_ID=org_...
+docker compose config --quiet
+docker compose --env-file .env config --format json | python3 scripts/check-deploy-config.py
+
+# 2. Respaldo con el contenedor actual (mismo bloque que «Aplicación de los cambios»).
+umask 077; mkdir -p backups
+backup_file="backups/postgres-pre-orgs-$(date -u +%Y%m%dT%H%M%SZ).dump"
+docker compose exec -T database sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$backup_file"
+test -s "$backup_file"
+docker compose exec -T database pg_restore --list < "$backup_file" > /dev/null
+# Copiar el dump fuera del VPS antes de seguir.
+
+# 3. Conservar la imagen actual para rollback y construir la nueva.
+docker tag "$(docker compose images -q backend)" supermercado-backend:pre-orgs
+docker compose build --pull backend
+
+# 4. Detener sólo el backend (la API responde 502 hasta el paso 7).
+docker compose stop backend
+
+# 5. Conteos previos, ensayo con rollback y migración real.
+docker compose run --rm --no-deps -T backend \
+  python -m scripts.verify_organizations_migration snapshot - > backups/org-counts-before.json
+docker compose run --rm --no-deps -T backend python -m scripts.migrate_organizations --dry-run
+docker compose run --rm --no-deps -T backend python -m scripts.migrate_organizations
+
+# 6. Verificación independiente: conteos iguales y 0 filas sin organization_id.
+docker compose run --rm --no-deps -T backend \
+  python -m scripts.verify_organizations_migration check - < backups/org-counts-before.json
+
+# 7. Levantar el backend nuevo y recargar nginx.
+docker compose up -d --wait --wait-timeout 180 backend
+curl --fail http://127.0.0.1:8000/health
+curl -s -o /dev/null -w '%{http_code}\n' https://api.supermercado.leacastro.dev/products   # 401
+docker compose exec -T nginx nginx -s reload
+```
+
+Después desplegar el frontend (Vercel). Comprobar con el usuario admin que
+"Leandro Supermercado" muestre los productos, el historial, los lotes y los
+faltantes existentes. Un usuario nuevo debe ver un catálogo vacío en su propia
+organización.
+
+**Rollback.**
+
+- **Si la migración falló:** no se confirmó nada. Arrancar la imagen anterior
+  (`supermercado-backend:pre-orgs`).
+- **Si ya se confirmó:** el código anterior no puede escribir sobre el esquema
+  nuevo, porque `organization_id` es NOT NULL. Restaurar el dump del paso 2
+  con `pg_restore --clean --if-exists` sobre la base detenida y volver a la
+  imagen anterior.
+
+En ambos casos, revertir también el frontend.
 
 ## Puntos a revisar
 

@@ -3,7 +3,7 @@
 Comprueba que ninguna fila quedó sin organization_id y que los conteos por tabla
 no cambiaron respecto de un snapshot previo. No imprime datos de negocio.
 
-Uso:
+Uso (con "-" el snapshot va a stdout / se lee de stdin, útil en contenedores):
   python -m scripts.verify_organizations_migration snapshot antes.json
   (migrar)
   python -m scripts.verify_organizations_migration check antes.json
@@ -66,14 +66,18 @@ def main(argv: list[str]) -> int:
         return 2
     from app.database import engine
 
-    path = Path(argv[2])
+    target = argv[2]
     with engine.connect() as connection:
         if argv[1] == "snapshot":
             counts = table_counts(connection)
-            path.write_text(json.dumps(counts, indent=2), encoding="utf-8")
-            print(f"Snapshot guardado: {counts}")
+            if target == "-":
+                print(json.dumps(counts))
+            else:
+                Path(target).write_text(json.dumps(counts, indent=2), encoding="utf-8")
+                print(f"Snapshot guardado: {counts}")
             return 0
-        before = json.loads(path.read_text(encoding="utf-8"))
+        raw = sys.stdin.read() if target == "-" else Path(target).read_text(encoding="utf-8")
+        before = json.loads(raw)
         errors = verification_errors(connection, before)
     for error in errors:
         print(f"ERROR: {error}", file=sys.stderr)

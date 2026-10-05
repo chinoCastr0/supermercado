@@ -30,6 +30,9 @@ def validate(config: dict) -> list[str]:
             errors.append(f"{key} difiere entre backend y database")
     if not (env.get("CLERK_SECRET_KEY") or "").startswith("sk_live_"):
         errors.append("CLERK_SECRET_KEY debe corresponder a producción; no cambiarla sin revisar la instancia")
+    org_id = env.get("BOOTSTRAP_ORGANIZATION_ID") or ""
+    if not re.fullmatch(r"org_[A-Za-z0-9]+", org_id) or "reemplazar" in org_id:
+        errors.append("BOOTSTRAP_ORGANIZATION_ID debe ser el ID org_... de la organización inicial en Clerk producción")
     if env.get("POSTGRES_HOST") != "database" or str(env.get("POSTGRES_PORT")) != "5432":
         errors.append("El backend debe conectar a database:5432")
     origins = [item.strip() for item in (env.get("ALLOWED_ORIGINS") or "").split(",") if item.strip()]

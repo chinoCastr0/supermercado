@@ -107,6 +107,37 @@ restricción en datos existentes: consultar violaciones, generar reporte, correg
 con decisión del operador, migrar y validar. No normalizar ni descartar registros
 silenciosamente para lograr que una migración pase.
 
+## Organizaciones y permisos
+
+Clerk es la fuente de verdad de organizaciones, miembros y roles; la base
+sólo guarda `organization_id` en cada fila. Reglas para mantener el aislamiento:
+
+- **Toda consulta nueva** filtra por `ctx.org_id`. Las búsquedas por id usan
+  `app.tenancy.get_owned`. Toda fila nueva recibe `organization_id=ctx.org_id`,
+  nunca un valor del body. Agregar un caso a `test_organization_isolation.py`
+  por cada endpoint nuevo.
+- **Permiso nuevo:** crearlo en Clerk, tanto en desarrollo como en producción.
+  Asignarlo a los roles que correspondan. Agregarlo a `backend/app/permissions.py`
+  y a `src/utils/permissions.ts`, y actualizar la tabla de
+  [DEPLOY_BACKEND.md](DEPLOY_BACKEND.md#roles-y-permisos). Un usuario con
+  sesión abierta recibe el permiso nuevo cuando se renueva su token (~1 minuto)
+  o cuando vuelve a ingresar.
+- **Tabla nueva con datos del negocio:** debe tener `organization_id NOT NULL`
+  con índice, o heredarlo por FK de una tabla que lo tenga. Las unicidades se
+  definen por organización, nunca globales.
+- **Organización eliminada en Clerk:** sus filas quedan huérfanas pero
+  inaccesibles, porque nadie puede tener esa organización activa. Se decidió no usar
+  webhook (`organization.deleted`) para evitar borrados automáticos. Para
+  purgar: hacer un backup, confirmar en Clerk que el `org_...` ya no existe y
+  borrar en una transacción `missing_products`, `print_batches` (los ítems caen
+  por cascada), `product_price_changes` y `products` con ese `organization_id`.
+  Si más adelante se necesita reaccionar a eventos, agregar un endpoint público
+  verificado con svix y `CLERK_WEBHOOK_SIGNING_SECRET`.
+- **Respaldo y restauración:** un `pg_dump` contiene todas las organizaciones.
+  Restaurar los datos de una sola exige filtrar por `organization_id` en una
+  base intermedia; nunca restaurar el dump completo sobre producción para
+  recuperar una organización.
+
 ## Preservación de información
 
 ### Objetivos a acordar

@@ -26,6 +26,9 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:?Defini POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defini POSTGRES_PASSWORD}
       CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:?Defini CLERK_SECRET_KEY}
+      # org_... de "Leandro Supermercado" en Clerk producción. Sólo lo usa
+      # scripts.migrate_organizations para asignar los datos existentes.
+      BOOTSTRAP_ORGANIZATION_ID: ${BOOTSTRAP_ORGANIZATION_ID:?Defini BOOTSTRAP_ORGANIZATION_ID}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:?Defini ALLOWED_ORIGINS}
     depends_on:
       database:

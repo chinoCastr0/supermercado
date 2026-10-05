@@ -23,6 +23,7 @@ class DeployConfigTests(unittest.TestCase):
                 "type": "volume", "source": "postgres_data", "target": "/var/lib/postgresql/data"}]},
             "backend": {"environment": {**credentials, "POSTGRES_HOST": "database",
                 "POSTGRES_PORT": "5432", "CLERK_SECRET_KEY": "sk_live_fake_offline",
+                "BOOTSTRAP_ORGANIZATION_ID": "org_FakeOffline123",
                 "ALLOWED_ORIGINS": "https://supermercado.leacastro.dev"},
                 "ports": [{"host_ip": "127.0.0.1", "published": "8000", "target": 8000}]},
             "nginx": {"environment": {"API_SERVER_NAME": "api.supermercado.leacastro.dev"}},
@@ -33,6 +34,18 @@ class DeployConfigTests(unittest.TestCase):
         self.assertEqual(module.validate(self.config), [])
         self.config["services"]["backend"].pop("ports")
         self.assertEqual(module.validate(self.config), [])
+
+    def test_requires_bootstrap_organization_id(self):
+        for value in (None, "", "Leandro Supermercado", "org_", "org_reemplazar", "user_abc", "org_abc; DROP"):
+            with self.subTest(value=value):
+                config = copy.deepcopy(self.config)
+                env = config["services"]["backend"]["environment"]
+                if value is None:
+                    env.pop("BOOTSTRAP_ORGANIZATION_ID")
+                else:
+                    env["BOOTSTRAP_ORGANIZATION_ID"] = value
+                self.assertTrue(any("BOOTSTRAP_ORGANIZATION_ID" in error
+                                    for error in module.validate(config)))
 
     def test_rejects_unsafe_origins(self):
         for extra in ("*", "http://localhost:5173", "https://localhost", "https://site.test/", "https://site.test/path"):
