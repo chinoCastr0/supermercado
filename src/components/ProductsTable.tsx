@@ -2,6 +2,7 @@
  * Representación de una página y emisión de acciones mediante callbacks.
  * No consulta la API. El cálculo del rango asume diez filas por página y debe
  * mantenerse sincronizado con PAGE_SIZE de App.
+ * Un callback ausente oculta su acción: el padre los omite según los permisos.
  */
 import type { Product } from "../types/product";
 import { formatDate } from "../utils/formatters";
@@ -16,12 +17,12 @@ type Props = {
   hasAnyProducts: boolean;
   selectedIds: ReadonlySet<number>;
   onPageChange: (page: number) => void;
-  onCreate: () => void;
-  onEdit: (product: Product) => void;
-  onDelete: (product: Product) => void;
+  onCreate?: () => void;
+  onEdit?: (product: Product) => void;
+  onDelete?: (product: Product) => void;
   onToggleSelected: (productId: number) => void;
   onTogglePage: (productIds: number[], selected: boolean) => void;
-  onPrintStatus: (product: Product, printed: boolean) => void;
+  onPrintStatus?: (product: Product, printed: boolean) => void;
 };
 
 /** Muestra una página y notifica selección, edición, borrado e impresión. */
@@ -63,9 +64,11 @@ export function ProductsTable({
         <p>
           {hasAnyProducts
             ? "Probá cambiando la búsqueda o los filtros."
-            : "Agregá tu primer producto o importá una planilla."}
+            : onCreate
+              ? "Agregá tu primer producto o importá una planilla."
+              : "Todavía no hay productos cargados en esta organización."}
         </p>
-        {!hasAnyProducts && (
+        {!hasAnyProducts && onCreate && (
           <button className="button primary" type="button" onClick={onCreate}>
             ＋ Nuevo producto
           </button>
@@ -151,7 +154,8 @@ export function ProductsTable({
                   <button
                     className={`print-status ${product.printed ? "printed" : "pending"}`}
                     type="button"
-                    onClick={() => onPrintStatus(product, !product.printed)}
+                    disabled={!onPrintStatus}
+                    onClick={() => onPrintStatus?.(product, !product.printed)}
                     aria-label={
                       product.printed
                         ? `Volver a marcar ${product.name} como pendiente`
@@ -162,21 +166,25 @@ export function ProductsTable({
                   </button>
                 </td>
                 <td className="row-actions">
-                  <button
-                    type="button"
-                    onClick={() => onEdit(product)}
-                    aria-label={`Editar ${product.name}`}
-                  >
-                    Editar
-                  </button>
-                  <button
-                    className="delete"
-                    type="button"
-                    onClick={() => onDelete(product)}
-                    aria-label={`Eliminar ${product.name}`}
-                  >
-                    ×
-                  </button>
+                  {onEdit && (
+                    <button
+                      type="button"
+                      onClick={() => onEdit(product)}
+                      aria-label={`Editar ${product.name}`}
+                    >
+                      Editar
+                    </button>
+                  )}
+                  {onDelete && (
+                    <button
+                      className="delete"
+                      type="button"
+                      onClick={() => onDelete(product)}
+                      aria-label={`Eliminar ${product.name}`}
+                    >
+                      ×
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}

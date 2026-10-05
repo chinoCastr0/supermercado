@@ -2,9 +2,11 @@
  * Navegación y estructura persistente que envuelve el contenido mediante children.
  * El texto de conexión es estático: no refleja el estado real de PostgreSQL.
  * La navegación entre secciones es local (sin router): el padre controla `view`.
+ * OrganizationSwitcher cambia la organización activa; AuthGate remonta la app.
  */
 import type { ReactNode } from "react";
-import { UserButton } from "@clerk/react";
+import { OrganizationSwitcher, UserButton } from "@clerk/react";
+import { usePermissions } from "../hooks/usePermissions";
 
 export type AppView = "productos" | "faltantes";
 
@@ -24,6 +26,7 @@ export function Layout({
   onImport,
   onRefresh,
 }: Props) {
+  const { canManageProducts } = usePermissions();
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -48,9 +51,11 @@ export function Layout({
           >
             <span>▤</span> Faltantes
           </button>
-          <button className="nav-item" type="button" onClick={onImport}>
-            <span>⇧</span> Importar datos
-          </button>
+          {canManageProducts && (
+            <button className="nav-item" type="button" onClick={onImport}>
+              <span>⇧</span> Importar datos
+            </button>
+          )}
         </nav>
         <div className="sidebar-foot">
           <span className="connection-dot" /> Base de datos conectada
@@ -75,6 +80,10 @@ export function Layout({
             >
               ↻
             </button>
+            {/* Invitar, cambiar roles y quitar miembros aparecen dentro del
+                perfil de la organización sólo con org:sys_memberships:manage
+                (admin); el resto ve la lista de miembros en modo lectura. */}
+            <OrganizationSwitcher hidePersonal />
             <UserButton />
           </div>
         </header>

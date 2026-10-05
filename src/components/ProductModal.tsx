@@ -2,6 +2,8 @@
  * Formulario de alta/edición con validación local de precio y texto PRESUR.
  * onSave delega la persistencia. La revisión se toma del producto que abrió
  * el formulario para que el servidor pueda rechazar una edición obsoleta.
+ * `access` deshabilita los campos que el rol no puede cambiar (precio aparte
+ * del resto); el backend vuelve a validar cada permiso.
  */
 import { useState } from "react";
 import type { FormEvent } from "react";
@@ -18,6 +20,7 @@ import {
   registerTextError,
 } from "../utils/registerFormat";
 import { getPriceChange, normalizeMoneyInput } from "../utils/money";
+import type { ProductFormAccess } from "../utils/permissions";
 import { Modal } from "./Modal";
 import { PriceCalculator } from "./PriceCalculator";
 import { OfferTicketModal } from "./OfferTicketModal";
@@ -33,6 +36,7 @@ type Props = {
   product: Product | null;
   initialBarcode?: string;
   focusCost?: boolean;
+  access: ProductFormAccess;
   isSaving: boolean;
   onClose: () => void;
   onSave: (payload: ProductPayload, productId?: number) => Promise<boolean>;
@@ -43,6 +47,7 @@ export function ProductModal({
   product,
   initialBarcode = "",
   focusCost = false,
+  access,
   isSaving,
   onClose,
   onSave,
@@ -63,6 +68,7 @@ export function ProductModal({
   const priceChange = product ? getPriceChange(String(product.price), draft.price) : null;
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!access.canSubmit) return;
     const error =
       registerTextError(draft.name, "El nombre", REGISTER_NAME_BYTES) ??
       registerTextError(
@@ -106,7 +112,11 @@ export function ProductModal({
         <div>
           <span className="modal-kicker">INVENTARIO</span>
           <h2 id="product-modal-title">
-            {product ? "Editar producto" : "Nuevo producto"}
+            {!product
+              ? "Nuevo producto"
+              : access.canSubmit
+                ? "Editar producto"
+                : "Detalle del producto"}
           </h2>
         </div>
         <button type="button" onClick={onClose} aria-label="Cerrar">
@@ -114,6 +124,13 @@ export function ProductModal({
         </button>
       </div>
       <form onSubmit={(event) => void submit(event)}>
+        {product && access.canSubmit && (!access.canEditDetails || !access.canEditPrice) && (
+          <p className="field-hint" role="note">
+            {access.canEditPrice
+              ? "Tu rol sólo permite cambiar el precio."
+              : "Tu rol no permite cambiar el precio."}
+          </p>
+        )}
         {validationError && (
           <p className="form-error" role="alert">
             {validationError}
@@ -123,6 +140,7 @@ export function ProductModal({
           Código de barras
           <input
             autoFocus={!focusCost && !product && !initialBarcode}
+            disabled={!access.canEditDetails}
             required
             maxLength={REGISTER_BARCODE_BYTES}
             value={draft.barcode}
@@ -140,6 +158,7 @@ export function ProductModal({
           Nombre del producto
           <input
             autoFocus={!focusCost && Boolean(product || initialBarcode)}
+            disabled={!access.canEditDetails}
             required
             maxLength={REGISTER_NAME_BYTES}
             value={draft.name}
@@ -160,6 +179,7 @@ export function ProductModal({
               min="0.01"
               step="0.01"
               type="number"
+              disabled={!access.canEditDetails}
               value={draft.weight}
               onChange={(event) =>
                 setDraft({ ...draft, weight: event.target.value })
@@ -170,6 +190,7 @@ export function ProductModal({
           <label>
             Unidad
             <select
+              disabled={!access.canEditDetails}
               value={draft.weight_unit}
               onChange={(event) =>
                 setDraft({
@@ -186,13 +207,15 @@ export function ProductModal({
             </select>
           </label>
         </div>
-        <PriceCalculator
-          autoFocusCost={focusCost}
-          onCalculate={(price) => {
-            setValidationError(null);
-            setDraft((current) => ({ ...current, price }));
-          }}
-        />
+        {access.canEditPrice && (
+          <PriceCalculator
+            autoFocusCost={focusCost}
+            onCalculate={(price) => {
+              setValidationError(null);
+              setDraft((current) => ({ ...current, price }));
+            }}
+          />
+        )}
         <label>
           <span className="final-price-heading">
             <span id="final-price-label">Precio final</span>
@@ -209,6 +232,7 @@ export function ProductModal({
             aria-labelledby="final-price-label"
             aria-describedby="final-price-change"
             required
+            disabled={!access.canEditPrice}
             inputMode="decimal"
             type="text"
             value={draft.price}
@@ -221,18 +245,20 @@ export function ProductModal({
           <small className="field-hint">Podés ajustarlo manualmente antes de guardar.</small>
         </label>
         <div className="modal-actions">
-          {product && <button className="button secondary" type="button" disabled={isSaving}
+          {product && access.canCreateOffer && <button className="button secondary" type="button" disabled={isSaving}
             onClick={() => setIsOfferOpen(true)}>Crear oferta</button>}
           <button className="button secondary" type="button" onClick={onClose}>
-            Cancelar
+            {access.canSubmit ? "Cancelar" : "Cerrar"}
           </button>
-          <button className="button primary" disabled={isSaving} type="submit">
-            {isSaving
-              ? "Guardando…"
-              : product
-                ? "Guardar cambios"
-                : "Agregar producto"}
-          </button>
+          {access.canSubmit && (
+            <button className="button primary" disabled={isSaving} type="submit">
+              {isSaving
+                ? "Guardando…"
+                : product
+                  ? "Guardar cambios"
+                  : "Agregar producto"}
+            </button>
+          )}
         </div>
       </form>
     </Modal>

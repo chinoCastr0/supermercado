@@ -2,6 +2,8 @@
  * Composición de la pantalla: filtros, selección, orden y apertura de modales.
  * El hook administra operaciones remotas. La paginación actual es local, sobre
  * todos los resultados descargados. Las selecciones conservan identidades entre filtros.
+ * Los botones se ocultan según los permisos de Clerk de la organización activa;
+ * el backend vuelve a exigirlos y un 403 se muestra en NoticeBanner.
  */
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
@@ -20,6 +22,7 @@ import { ProductFilters } from "./components/ProductFilters";
 import { ProductModal } from "./components/ProductModal";
 import { ProductsTable } from "./components/ProductsTable";
 import { StatsCards } from "./components/StatsCards";
+import { usePermissions } from "./hooks/usePermissions";
 import { useProducts } from "./hooks/useProducts";
 import { useBarcodeKeyboard } from "./hooks/useBarcodeKeyboard";
 import type {
@@ -30,6 +33,7 @@ import type {
 } from "./types/product";
 import { closeProductEditor, saveProductAndReset } from "./utils/productModal";
 import { compareMoney } from "./utils/money";
+import { canOpenProduct, productFormAccess } from "./utils/permissions";
 import {
   applySearchInput,
   scheduleDebouncedSearch,
@@ -45,6 +49,7 @@ const BarcodeScanner = lazy(() =>
 /** Coordina el inventario visible y las acciones de sus componentes. */
 function App() {
   const inventory = useProducts();
+  const can = usePermissions();
   const loadProducts = inventory.load;
   const [view, setView] = useState<AppView>("productos");
   const [query, setQuery] = useState("");
@@ -137,8 +142,20 @@ function App() {
     const product = await inventory.findByBarcode(barcode);
     if (product === undefined) return "error";
     if (product === null) {
-      createScannedProduct(barcode);
+      if (can.canManageProducts) createScannedProduct(barcode);
+      else
+        inventory.setNotice({
+          kind: "error",
+          message: `No existe un producto con el código ${barcode} y tu rol no permite darlo de alta.`,
+        });
       return "not-found";
+    }
+    if (!canOpenProduct(can)) {
+      inventory.setNotice({
+        kind: "success",
+        message: `${product.name}: ${product.barcode}`,
+      });
+      return "found";
     }
     editProduct(product);
     setFocusProductCost(true);
@@ -293,12 +310,14 @@ function App() {
     <Layout
       view={view}
       onNavigate={setView}
-      onImport={() => setModal("import")}
+      onImport={() => {
+        if (can.canManageProducts) setModal("import");
+      }}
       onRefresh={() => {
         if (view === "productos") void inventory.load();
       }}
     >
-      {view === "faltantes" && <MissingProductsView />}
+      {view === "faltantes" && <MissingProductsView canManage={can.canManageMissing} />}
       {view === "productos" && (
       <section className="content">
         <div className="page-heading">
@@ -314,28 +333,34 @@ function App() {
             >
               ▣ <span>Escanear</span>
             </button>
-            <button
-              className="button secondary"
-              type="button"
-              disabled={inventory.isExporting}
-              onClick={() => void inventory.exportRegister()}
-            >
-              {inventory.isExporting ? "Generando…" : "Exportar caja"}
-            </button>
-            <button
-              className="button secondary"
-              type="button"
-              onClick={() => setModal("import")}
-            >
-              ⇧ <span>Importar</span>
-            </button>
-            <button
-              className="button primary"
-              type="button"
-              onClick={createProduct}
-            >
-              ＋ <span>Nuevo producto</span>
-            </button>
+            {can.canExportRegister && (
+              <button
+                className="button secondary"
+                type="button"
+                disabled={inventory.isExporting}
+                onClick={() => void inventory.exportRegister()}
+              >
+                {inventory.isExporting ? "Generando…" : "Exportar caja"}
+              </button>
+            )}
+            {can.canManageProducts && (
+              <>
+                <button
+                  className="button secondary"
+                  type="button"
+                  onClick={() => setModal("import")}
+                >
+                  ⇧ <span>Importar</span>
+                </button>
+                <button
+                  className="button primary"
+                  type="button"
+                  onClick={createProduct}
+                >
+                  ＋ <span>Nuevo producto</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
         {inventory.notice && (
@@ -356,22 +381,26 @@ function App() {
             <div>
               {selectedProductIds.length > 0 && (
                 <>
-                  <button
-                    className="button secondary"
-                    type="button"
-                    disabled={inventory.isSaving}
-                    onClick={openBulkPrice}
-                  >
-                    Cambiar precio
-                  </button>
-                  <button
-                    className="button danger"
-                    type="button"
-                    disabled={inventory.isSaving}
-                    onClick={() => void deleteSelected()}
-                  >
-                    Eliminar seleccionados
-                  </button>
+                  {can.canEditPrices && (
+                    <button
+                      className="button secondary"
+                      type="button"
+                      disabled={inventory.isSaving}
+                      onClick={openBulkPrice}
+                    >
+                      Cambiar precio
+                    </button>
+                  )}
+                  {can.canManageProducts && (
+                    <button
+                      className="button danger"
+                      type="button"
+                      disabled={inventory.isSaving}
+                      onClick={() => void deleteSelected()}
+                    >
+                      Eliminar seleccionados
+                    </button>
+                  )}
                   <button
                     className="button secondary"
                     type="button"
@@ -382,43 +411,47 @@ function App() {
                   </button>
                 </>
               )}
-              <button
-                className="button secondary"
-                type="button"
-                disabled={!pendingFiltered.length}
-                onClick={selectAllPending}
-              >
-                Seleccionar todos los pendientes
-              </button>
-              <button
-                className="button secondary"
-                type="button"
-                disabled={!selectedProductIds.length || inventory.isSaving}
-                onClick={() => void markSelection(false)}
-              >
-                Volver a pendientes
-              </button>
-              <button
-                className="button secondary"
-                type="button"
-                disabled={!selectedProductIds.length || inventory.isSaving}
-                onClick={() => void markSelection(true)}
-              >
-                Marcar impresos
-              </button>
-              <button
-                className="button primary"
-                type="button"
-                disabled={
-                  inventory.isGeneratingLabels ||
-                  (!selectedProductIds.length && !pendingFiltered.length)
-                }
-                onClick={() => void generateLabels()}
-              >
-                {inventory.isGeneratingLabels
-                  ? "Generando…"
-                  : "Generar carteles"}
-              </button>
+              {can.canPrintLabels && (
+                <>
+                  <button
+                    className="button secondary"
+                    type="button"
+                    disabled={!pendingFiltered.length}
+                    onClick={selectAllPending}
+                  >
+                    Seleccionar todos los pendientes
+                  </button>
+                  <button
+                    className="button secondary"
+                    type="button"
+                    disabled={!selectedProductIds.length || inventory.isSaving}
+                    onClick={() => void markSelection(false)}
+                  >
+                    Volver a pendientes
+                  </button>
+                  <button
+                    className="button secondary"
+                    type="button"
+                    disabled={!selectedProductIds.length || inventory.isSaving}
+                    onClick={() => void markSelection(true)}
+                  >
+                    Marcar impresos
+                  </button>
+                  <button
+                    className="button primary"
+                    type="button"
+                    disabled={
+                      inventory.isGeneratingLabels ||
+                      (!selectedProductIds.length && !pendingFiltered.length)
+                    }
+                    onClick={() => void generateLabels()}
+                  >
+                    {inventory.isGeneratingLabels
+                      ? "Generando…"
+                      : "Generar carteles"}
+                  </button>
+                </>
+              )}
             </div>
           </div>
           <div className="table-toolbar">
@@ -449,13 +482,20 @@ function App() {
             hasAnyProducts={Boolean(inventory.products.length)}
             selectedIds={selectedIds}
             onPageChange={setPage}
-            onCreate={createProduct}
-            onEdit={editProduct}
-            onDelete={(product) => void deleteProduct(product)}
+            onCreate={can.canManageProducts ? createProduct : undefined}
+            onEdit={canOpenProduct(can) ? editProduct : undefined}
+            onDelete={
+              can.canManageProducts
+                ? (product) => void deleteProduct(product)
+                : undefined
+            }
             onToggleSelected={toggleSelected}
             onTogglePage={togglePage}
-            onPrintStatus={(product, printed) =>
-              void inventory.setPrintStatus([product.id], printed)
+            onPrintStatus={
+              can.canPrintLabels
+                ? (product, printed) =>
+                    void inventory.setPrintStatus([product.id], printed)
+                : undefined
             }
           />
         </section>
@@ -467,6 +507,7 @@ function App() {
           product={editing}
           initialBarcode={newProductBarcode}
           focusCost={focusProductCost}
+          access={productFormAccess(can, editing === null)}
           isSaving={inventory.isSaving}
           onClose={closeProductModal}
           onSave={saveProduct}

@@ -17,6 +17,7 @@ import type {
   ProductListFilters,
   ProductPayload,
 } from "../types/product";
+import { forbiddenMessage } from "../utils/permissions";
 import { buildProductListQuery } from "../utils/productSearch";
 
 export const API_URL = (
@@ -38,12 +39,17 @@ export function extractErrorMessage(data: unknown): string {
   return "No se pudo completar la operación.";
 }
 
+/** Mensaje legible de una respuesta fallida; los 403 explican el permiso faltante. */
 export async function readError(response: Response): Promise<string> {
+  let data: unknown = null;
   try {
-    return extractErrorMessage(await response.json());
+    data = await response.json();
   } catch {
-    return extractErrorMessage(null);
+    // Cuerpo vacío o no JSON: se usa el mensaje genérico.
   }
+  return response.status === 403
+    ? forbiddenMessage(data)
+    : extractErrorMessage(data);
 }
 
 /** fetch con el token de sesión de Clerk adjunto; usarlo en vez de fetch directo. */

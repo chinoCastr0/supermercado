@@ -1,5 +1,8 @@
 /**
  * Caché de la interfaz para arranque offline; no almacena el inventario.
+ * Sólo intercepta GET del mismo origen (HTML y recursos estáticos): la API vive
+ * en otro origen y sus respuestas nunca se guardan, así que al cambiar de
+ * organización no puede quedar en caché ningún dato de la anterior.
  * La navegación prioriza red y los recursos visuales priorizan caché. Revisar
  * versionado e invalidación antes de desplegar una nueva versión de la aplicación.
  */

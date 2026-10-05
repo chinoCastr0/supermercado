@@ -145,8 +145,11 @@
 }
 .topbar-actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
   gap: 14px;
+  min-width: 0;
 }
 .auth-gate {
   min-height: 100vh;

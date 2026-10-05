@@ -24,8 +24,23 @@ const EMPTY_DRAFT: MissingDraft = {
   productId: null,
 };
 
+/** Sin org:missing:manage no se monta la lista: evita pedirla y recibir 403. */
+export function MissingProductsView({ canManage }: { canManage: boolean }) {
+  if (!canManage) {
+    return (
+      <section className="content">
+        <div className="state-panel">
+          <h3>Sin acceso a faltantes</h3>
+          <p>Tu rol en esta organización no incluye la lista de faltantes.</p>
+        </div>
+      </section>
+    );
+  }
+  return <MissingProductsContent />;
+}
+
 /** Coordina la lista de faltantes y el formulario de alta rápida. */
-export function MissingProductsView() {
+function MissingProductsContent() {
   const missing = useMissingProducts();
   const load = missing.load;
 
