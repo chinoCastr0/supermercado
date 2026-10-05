@@ -10,6 +10,7 @@ import app.models
 from app.api.products import get_product_by_barcode
 from app.database import Base
 from app.models.product import Product
+from org_context import ADMIN_A, ORG_A
 
 
 def test_get_product_by_barcode_returns_exact_match() -> None:
@@ -18,6 +19,7 @@ def test_get_product_by_barcode_returns_exact_match() -> None:
 
     with Session(engine) as db:
         product = Product(
+            organization_id=ORG_A,
             barcode="07797906054925",
             name="Producto",
             price=Decimal("1500"),
@@ -25,7 +27,7 @@ def test_get_product_by_barcode_returns_exact_match() -> None:
         db.add(product)
         db.commit()
 
-        result = get_product_by_barcode("07797906054925", db)
+        result = get_product_by_barcode("07797906054925", db, ADMIN_A)
 
         assert result.id == product.id
         assert result.barcode == "07797906054925"
@@ -37,7 +39,7 @@ def test_get_product_by_barcode_returns_404_when_missing() -> None:
 
     with Session(engine) as db:
         with pytest.raises(HTTPException) as exc_info:
-            get_product_by_barcode("7797906054925", db)
+            get_product_by_barcode("7797906054925", db, ADMIN_A)
 
     assert exc_info.value.status_code == 404
     assert "7797906054925" in str(exc_info.value.detail)

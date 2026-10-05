@@ -28,6 +28,7 @@ from app.schemas.missing_product import (
     MissingProductUpdate,
 )
 from app.schemas.product import ProductCreate
+from org_context import ADMIN_A, ORG_A, ORG_B
 
 
 def _engine():
@@ -40,18 +41,19 @@ def _product(db: Session, barcode: str = "MISS-REF", price: str = "1234.56") -> 
     return create_product(
         ProductCreate(barcode=barcode, name="Producto ref", price=price),
         db,
+        ADMIN_A,
     )
 
 
 def _create(db: Session, **overrides) -> MissingProduct:
     payload = {"name": "COCA COLA 2.25L"}
     payload.update(overrides)
-    return create_missing_product(MissingProductCreate(**payload), db)
+    return create_missing_product(MissingProductCreate(**payload), db, ADMIN_A)
 
 
 def _list(db: Session, *, status_filter: str = "all", search: str = ""):
     return list_missing_products(
-        db, skip=0, limit=200, status_filter=status_filter, search=search
+        db, ADMIN_A, skip=0, limit=200, status_filter=status_filter, search=search
     )
 
 
@@ -98,7 +100,7 @@ def test_list_orders_pending_before_resolved_then_by_recent() -> None:
         second = _create(db, name="Segundo")
         resolved = _create(db, name="Resuelto")
         update_missing_product(
-            resolved.id, MissingProductUpdate(status="resolved"), db
+            resolved.id, MissingProductUpdate(status="resolved"), db, ADMIN_A
         )
 
         listed = _list(db)
@@ -114,7 +116,7 @@ def test_list_filters_by_status_and_name() -> None:
         _create(db, name="Agua saborizada")
         resolved = _create(db, name="COCA COLA lata")
         update_missing_product(
-            resolved.id, MissingProductUpdate(status="resolved"), db
+            resolved.id, MissingProductUpdate(status="resolved"), db, ADMIN_A
         )
 
         only_pending = _list(db, status_filter="pending")
@@ -141,6 +143,7 @@ def test_edit_quantity_and_notes() -> None:
             record.id,
             MissingProductUpdate(quantity="4 bultos", notes="nota nueva"),
             db,
+            ADMIN_A,
         )
 
         assert updated.quantity == "4 bultos"
@@ -155,7 +158,7 @@ def test_notes_can_be_cleared_with_explicit_null() -> None:
         record = _create(db, notes="algo")
 
         updated = update_missing_product(
-            record.id, MissingProductUpdate(notes=None), db
+            record.id, MissingProductUpdate(notes=None), db, ADMIN_A
         )
 
         assert updated.notes is None
@@ -167,13 +170,13 @@ def test_mark_resolved_then_reopen_toggles_timestamp() -> None:
         record = _create(db)
 
         resolved = update_missing_product(
-            record.id, MissingProductUpdate(status="resolved"), db
+            record.id, MissingProductUpdate(status="resolved"), db, ADMIN_A
         )
         assert resolved.status == "resolved"
         assert isinstance(resolved.resolved_at, datetime)
 
         reopened = update_missing_product(
-            record.id, MissingProductUpdate(status="pending"), db
+            record.id, MissingProductUpdate(status="pending"), db, ADMIN_A
         )
         assert reopened.status == "pending"
         assert reopened.resolved_at is None
@@ -184,11 +187,11 @@ def test_delete_missing_product() -> None:
     with Session(engine) as db:
         record = _create(db)
 
-        delete_missing_product(record.id, db)
+        delete_missing_product(record.id, db, ADMIN_A)
 
         assert db.get(MissingProduct, record.id) is None
         with pytest.raises(HTTPException) as missing:
-            delete_missing_product(record.id, db)
+            delete_missing_product(record.id, db, ADMIN_A)
         assert missing.value.status_code == 404
 
 
@@ -197,7 +200,7 @@ def test_update_missing_id_returns_404() -> None:
     with Session(engine) as db:
         with pytest.raises(HTTPException) as error:
             update_missing_product(
-                999, MissingProductUpdate(quantity="1"), db
+                999, MissingProductUpdate(quantity="1"), db, ADMIN_A
             )
         assert error.value.status_code == 404
 
@@ -222,11 +225,12 @@ def test_missing_product_operations_never_touch_the_linked_product() -> None:
             record.id,
             MissingProductUpdate(quantity="6 bultos", notes="ojo el precio"),
             db,
+            ADMIN_A,
         )
         update_missing_product(
-            record.id, MissingProductUpdate(status="resolved"), db
+            record.id, MissingProductUpdate(status="resolved"), db, ADMIN_A
         )
-        delete_missing_product(record.id, db)
+        delete_missing_product(record.id, db, ADMIN_A)
         db.refresh(product)
 
         assert product.name == original["name"]
@@ -254,7 +258,7 @@ def test_duplicate_pending_for_same_product_returns_409_with_existing() -> None:
 
         # Un segundo faltante SÍ se permite una vez resuelto el primero.
         update_missing_product(
-            first.id, MissingProductUpdate(status="resolved"), db
+            first.id, MissingProductUpdate(status="resolved"), db, ADMIN_A
         )
         again = _create(db, product_id=product.id, name="Coca cola de nuevo")
         assert again.status == "pending"
@@ -286,9 +290,12 @@ def test_database_conflict_after_fast_path_miss_returns_409(monkeypatch):
 
         def miss_once(statement, *args, **kwargs):
             nonlocal calls
-            calls += 1
-            if calls == 1:
-                return None  # Otro request insertó después de nuestro chequeo.
+            # Sólo la consulta de pendientes falla una vez; la del producto
+            # referenciado (también vía scalar, acotada a la org) sigue normal.
+            if statement.column_descriptions[0]["entity"] is MissingProduct:
+                calls += 1
+                if calls == 1:
+                    return None  # Otro request insertó después de nuestro chequeo.
             return original_scalar(statement, *args, **kwargs)
 
         monkeypatch.setattr(db, "scalar", miss_once)
@@ -308,12 +315,12 @@ def test_update_pending_conflict_rolls_back_all_changes(reopen):
         product = _product(db)
         record = _create(db, product_id=product.id if reopen else None)
         if reopen:
-            update_missing_product(record.id, MissingProductUpdate(status="resolved"), db)
+            update_missing_product(record.id, MissingProductUpdate(status="resolved"), db, ADMIN_A)
         original_status, original_date = record.status, record.resolved_at
         first = _create(db, product_id=product.id)
         changes = {"status": "pending"} if reopen else {"product_id": product.id}
         with pytest.raises(HTTPException) as conflict:
-            update_missing_product(record.id, MissingProductUpdate(notes="No persistir", **changes), db)
+            update_missing_product(record.id, MissingProductUpdate(notes="No persistir", **changes), db, ADMIN_A)
         assert conflict.value.status_code == 409
         assert conflict.value.detail["existing"]["id"] == first.id
         db.refresh(record)
@@ -328,7 +335,7 @@ def test_unrelated_integrity_error_is_not_reported_as_pending_conflict():
     from app.api.missing_products import _commit_missing_product
 
     with Session(_engine()) as db:
-        record = MissingProduct(name=None, status="pending")
+        record = MissingProduct(organization_id=ORG_A, name=None, status="pending")
         db.add(record)
         with pytest.raises(IntegrityError):
             _commit_missing_product(record, db)
@@ -336,29 +343,22 @@ def test_unrelated_integrity_error_is_not_reported_as_pending_conflict():
 
 
 
-def test_sql_index_migration_is_repeatable_on_existing_table():
-    from pathlib import Path
-    from sqlalchemy import text
+def test_pending_index_is_scoped_by_organization():
+    # El índice global uq_missing_products_pending_product se reemplazó por
+    # uq_missing_products_org_pending_product (organization_id, product_id);
+    # su migración PostgreSQL está cubierta en test_organizations_migration.py.
     from sqlalchemy.exc import IntegrityError
 
     engine = _engine()
-    sql = (Path(__file__).resolve().parents[1] / "migrations" /
-           "20260912_unique_pending_missing_products.sql").read_text(encoding="utf-8")
-    with engine.begin() as connection:
-        connection.execute(text("DROP INDEX uq_missing_products_pending_product"))
     with Session(engine) as db:
         product = _product(db)
-        first = _create(db, product_id=product.id)
-        first_id, product_id = first.id, product.id
-    with engine.begin() as connection:
-        connection.execute(text(sql))
-        connection.execute(text(sql))
-    with Session(engine) as db:
-        assert db.get(MissingProduct, first_id).product_id == product_id
-        db.add(MissingProduct(name="Duplicado directo", product_id=product_id))
+        first_id, product_id = _create(db, product_id=product.id).id, product.id
+        db.add(MissingProduct(organization_id=ORG_B, name="Otra org", product_id=product_id))
+        db.commit()
+        db.add(MissingProduct(organization_id=ORG_A, name="Duplicado directo", product_id=product_id))
         with pytest.raises(IntegrityError):
             db.commit()
         db.rollback()
-        assert len(_list(db)) == 1
+        assert [record.id for record in _list(db)] == [first_id]
         assert _create(db).product_id is None
         assert _create(db).product_id is None

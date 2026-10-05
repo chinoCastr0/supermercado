@@ -12,6 +12,7 @@ import app.models
 from app.api.products import import_products
 from app.database import Base
 from app.models.product import Product
+from org_context import ADMIN_A, ORG_A
 
 
 def test_import_updates_existing_and_creates_new_products_in_one_batch() -> None:
@@ -30,6 +31,7 @@ def test_import_updates_existing_and_creates_new_products_in_one_batch() -> None
 
     with Session(engine) as db:
         existing = Product(
+            organization_id=ORG_A,
             barcode="111",
             name="Nombre original",
             price=Decimal("1500"),
@@ -42,7 +44,7 @@ def test_import_updates_existing_and_creates_new_products_in_one_batch() -> None
         db.add(existing)
         db.commit()
 
-        result = import_products(upload, db)
+        result = import_products(upload, db, ADMIN_A)
         products = db.scalars(select(Product).order_by(Product.barcode)).all()
 
         assert result == {
@@ -82,7 +84,7 @@ def test_import_rejects_a_new_product_that_would_not_fit_the_register() -> None:
     upload = UploadFile(filename="productos.xlsx", file=BytesIO(content.getvalue()))
 
     with Session(engine) as db:
-        result = import_products(upload, db)
+        result = import_products(upload, db, ADMIN_A)
         products = db.scalars(select(Product)).all()
 
         assert products == []

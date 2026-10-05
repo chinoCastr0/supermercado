@@ -2,7 +2,8 @@
 
 Los snapshots sobreviven al borrado del producto porque product_id no tiene FK.
 Las columnas opcionales permiten reconocer lotes antiguos sin una copia completa.
-La inmutabilidad es una convención de aplicación, no una restricción de la tabla."""
+La inmutabilidad es una convención de aplicación, no una restricción de la tabla.
+Los ítems no guardan organización: la heredan de su lote por la FK batch_id."""
 
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -19,6 +20,7 @@ class PrintBatch(Base):
     __tablename__ = "print_batches"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    organization_id: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
     status: Mapped[str] = mapped_column(
         String(20),
         default="generated",

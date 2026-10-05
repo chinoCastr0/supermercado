@@ -24,6 +24,7 @@ from app.schemas.product import (
     ProductCreate,
     ProductPrintStatusUpdate,
 )
+from org_context import ADMIN_A, ORG_A
 
 
 def _engine():
@@ -36,6 +37,7 @@ def _create(db: Session, barcode: str, price: str) -> Product:
     return create_product(
         ProductCreate(barcode=barcode, name=barcode, price=price),
         db,
+        ADMIN_A,
     )
 
 
@@ -46,6 +48,7 @@ def test_bulk_price_single_product_can_go_down_and_keeps_exact_cents() -> None:
         set_print_status(
             ProductPrintStatusUpdate(product_ids=[product.id], printed=True),
             db,
+            ADMIN_A,
         )
         initial_revision = product.revision
         initial_label_version = product.label_version
@@ -58,6 +61,7 @@ def test_bulk_price_single_product_can_go_down_and_keeps_exact_cents() -> None:
                 ],
             ),
             db,
+            ADMIN_A,
         )
         db.refresh(product)
 
@@ -98,6 +102,7 @@ def test_bulk_price_updates_multiple_products_and_skips_equal_price() -> None:
                 ],
             ),
             db,
+            ADMIN_A,
         )
         for product in (lower, higher, equal):
             db.refresh(product)
@@ -145,6 +150,7 @@ def test_one_stale_revision_rolls_back_entire_bulk_price_change() -> None:
                     ],
                 ),
                 db,
+                ADMIN_A,
             )
 
         assert conflict.value.status_code == 409
@@ -172,6 +178,7 @@ def test_bulk_delete_preserves_price_history_and_label_snapshots() -> None:
         response = generate_labels(
             LabelGenerationRequest(product_ids=[first.id, second.id]),
             db,
+            ADMIN_A,
         )
         batch_id = response.headers["X-Print-Batch-Id"]
         product_ids = [first.id, second.id]
@@ -179,6 +186,7 @@ def test_bulk_delete_preserves_price_history_and_label_snapshots() -> None:
         result = bulk_delete_products(
             BulkDeleteRequest(product_ids=product_ids),
             db,
+            ADMIN_A,
         )
 
         assert result.deleted_count == 2
@@ -200,6 +208,7 @@ def test_missing_id_prevents_any_bulk_delete() -> None:
             bulk_delete_products(
                 BulkDeleteRequest(product_ids=[product.id, product.id + 999]),
                 db,
+                ADMIN_A,
             )
 
         assert missing.value.status_code == 404

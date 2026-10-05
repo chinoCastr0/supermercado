@@ -9,6 +9,7 @@ from app.api.labels import confirm_batch, generate_labels
 from app.database import Base
 from app.models.product import Product
 from app.schemas.product import LabelGenerationRequest
+from org_context import ADMIN_A, ORG_A
 
 
 def test_old_batch_cannot_confirm_modified_product() -> None:
@@ -17,6 +18,7 @@ def test_old_batch_cannot_confirm_modified_product() -> None:
 
     with Session(engine) as db:
         current = Product(
+            organization_id=ORG_A,
             barcode="BATCH-1",
             name="Producto",
             price=Decimal("100"),
@@ -30,12 +32,13 @@ def test_old_batch_cannot_confirm_modified_product() -> None:
         response = generate_labels(
             LabelGenerationRequest(product_ids=[current.id]),
             db,
+            ADMIN_A,
         )
         batch_id = response.headers["X-Print-Batch-Id"]
         current.label_version += 1
         db.commit()
 
-        confirmation = confirm_batch(batch_id, db)
+        confirmation = confirm_batch(batch_id, db, ADMIN_A)
         db.refresh(current)
 
         assert confirmation.marked_count == 0

@@ -1,4 +1,7 @@
-"""Endpoints transaccionales para generación y confirmación de carteles."""
+"""Endpoints transaccionales para generación y confirmación de carteles.
+
+Lotes y productos se leen siempre dentro de la organización activa; los ítems
+de un lote heredan la organización del lote (FK batch_id)."""
 
 from datetime import datetime, timezone
 import json
@@ -8,6 +11,8 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
+from app import permissions
+from app.auth import AuthContext, require_permission
 from app.database import get_db
 from app.models.print_batch import PrintBatch, PrintBatchItem
 from app.models.product import Product
@@ -18,6 +23,7 @@ from app.schemas.product import (
     ProductPrintStatusUpdate,
 )
 from app.services.label_pdf import LabelProductSnapshot, build_labels_pdf
+from app.tenancy import get_owned
 
 
 router = APIRouter(prefix="/labels", tags=["Labels"])
@@ -26,12 +32,18 @@ router = APIRouter(prefix="/labels", tags=["Labels"])
 def _products_in_requested_order(
     db: Session,
     product_ids: list[int],
+    organization_id: str,
     *,
     lock: bool = False,
 ) -> list[Product]:
-    """Deduplica IDs y restaura su orden; lock mantiene filas bloqueadas hasta commit."""
+    """Deduplica IDs y restaura su orden; lock mantiene filas bloqueadas hasta commit.
+
+    IDs de otra organización se informan como inexistentes."""
     unique_ids = list(dict.fromkeys(product_ids))
-    statement = select(Product).where(Product.id.in_(unique_ids))
+    statement = select(Product).where(
+        Product.organization_id == organization_id,
+        Product.id.in_(unique_ids),
+    )
     if lock:
         statement = statement.with_for_update()
     products = db.scalars(statement).all()
@@ -46,10 +58,14 @@ def _products_in_requested_order(
 
 
 @router.get("/pending-count")
-def pending_count(db: Session = Depends(get_db)) -> dict[str, int]:
+def pending_count(
+    db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(require_permission(permissions.PRODUCTS_READ)),
+) -> dict[str, int]:
     """Cuenta carteles cuya versión vigente aún no tiene confirmación."""
     count = db.scalar(
         select(func.count(Product.id)).where(
+            Product.organization_id == ctx.org_id,
             or_(
                 Product.printed_at.is_(None),
                 Product.printed_label_version.is_(None),
@@ -64,9 +80,10 @@ def pending_count(db: Session = Depends(get_db)) -> dict[str, int]:
 def set_print_status(
     payload: ProductPrintStatusUpdate,
     db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(require_permission(permissions.LABELS_PRINT)),
 ) -> PrintStatusResponse:
     """Marca el estado leído del catálogo; no recibe la versión vista por el usuario."""
-    products = _products_in_requested_order(db, payload.product_ids)
+    products = _products_in_requested_order(db, payload.product_ids, ctx.org_id)
     now = datetime.now(timezone.utc)
     for product in products:
         if payload.printed:
@@ -87,9 +104,12 @@ def set_print_status(
 def generate_labels(
     payload: LabelGenerationRequest,
     db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(require_permission(permissions.LABELS_PRINT)),
 ) -> Response:
     """Genera PDF bajo bloqueo y persiste un snapshot de cada cartel válido."""
-    products = _products_in_requested_order(db, payload.product_ids, lock=True)
+    products = _products_in_requested_order(
+        db, payload.product_ids, ctx.org_id, lock=True
+    )
     snapshots = [
         LabelProductSnapshot(
             id=product.id,
@@ -108,7 +128,9 @@ def generate_labels(
             detail="Ningún producto tiene un código de barras representable.",
         )
 
-    batch = PrintBatch(id=str(uuid4()), status="generated")
+    batch = PrintBatch(
+        id=str(uuid4()), status="generated", organization_id=ctx.org_id
+    )
     db.add(batch)
     by_id = {product.id: product for product in products}
     snapshots_by_id = {snapshot.id: snapshot for snapshot in snapshots}
@@ -162,9 +184,10 @@ def generate_labels(
 def reprint_batch_pdf(
     batch_id: str,
     db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(require_permission(permissions.LABELS_PRINT)),
 ) -> Response:
     """Reconstruye desde snapshots; rechaza lotes históricos incompletos."""
-    batch = db.get(PrintBatch, batch_id)
+    batch = get_owned(db, PrintBatch, batch_id, ctx.org_id)
     if batch is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -225,9 +248,10 @@ def reprint_batch_pdf(
 def confirm_batch(
     batch_id: str,
     db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(require_permission(permissions.LABELS_PRINT)),
 ) -> BatchConfirmationResponse:
     """Compara versiones y confirma coincidencias; actualmente lee sin bloqueo de filas."""
-    batch = db.get(PrintBatch, batch_id)
+    batch = get_owned(db, PrintBatch, batch_id, ctx.org_id)
     if batch is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -238,7 +262,10 @@ def confirm_batch(
         select(PrintBatchItem).where(PrintBatchItem.batch_id == batch_id)
     ).all()
     products = db.scalars(
-        select(Product).where(Product.id.in_([item.product_id for item in items]))
+        select(Product).where(
+            Product.organization_id == ctx.org_id,
+            Product.id.in_([item.product_id for item in items]),
+        )
     ).all()
     by_id = {product.id: product for product in products}
     stale_ids: list[int] = []

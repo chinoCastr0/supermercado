@@ -11,6 +11,16 @@ import app.models
 from app.database import Base
 from app.models.product import Product
 from app.services.label_pdf import build_labels_pdf
+from app import permissions
+from app.auth import AuthContext
+
+# Contexto sintético: estos diagnósticos no pasan por HTTP ni por Clerk.
+DIAGNOSTIC_CTX = AuthContext(
+    user_id="user_diagnostico",
+    org_id="org_diagnostico",
+    org_role="org:admin",
+    permissions=permissions.ALL,
+)
 
 
 # El destino recibido se sobrescribe. Sólo se persisten ejemplos en SQLite en memoria.
@@ -22,10 +32,11 @@ Base.metadata.create_all(engine)
 with Session(engine) as database:
     database.add_all(
         [
-            Product(barcode="TRACE-10", name="Precio entero", price=Decimal("10.00")),
-            Product(barcode="TRACE-1050", name="Precio centavos", price=Decimal("10.50")),
-            Product(barcode="TRACE-123456", name="Caso trazado", price=Decimal("1234.56")),
+            Product(organization_id=DIAGNOSTIC_CTX.org_id, barcode="TRACE-10", name="Precio entero", price=Decimal("10.00")),
+            Product(organization_id=DIAGNOSTIC_CTX.org_id, barcode="TRACE-1050", name="Precio centavos", price=Decimal("10.50")),
+            Product(organization_id=DIAGNOSTIC_CTX.org_id, barcode="TRACE-123456", name="Caso trazado", price=Decimal("1234.56")),
             Product(
+                organization_id=DIAGNOSTIC_CTX.org_id,
                 barcode="TRACE-HIGH",
                 name="Precio máximo",
                 price=Decimal("9999999999.99"),

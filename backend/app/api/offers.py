@@ -6,9 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field, StringConstraints
 from sqlalchemy.orm import Session
 
+from app import permissions
+from app.auth import AuthContext, require_permission
 from app.database import get_db
 from app.models.product import Product
 from app.services.offer_ticket_pdf import build_offer_ticket_pdf
+from app.tenancy import get_owned
 
 router = APIRouter(prefix="/offers", tags=["Offers"])
 
@@ -23,9 +26,13 @@ class OfferTicketRequest(BaseModel):
 
 @router.post("/ticket", response_class=Response,
              responses={200: {"content": {"application/pdf": {}}}})
-def generate_offer_ticket(payload: OfferTicketRequest, db: Session = Depends(get_db)) -> Response:
-    """Lee el producto y devuelve un PDF descargable sin escrituras en la base."""
-    product = db.get(Product, payload.product_id)
+def generate_offer_ticket(
+    payload: OfferTicketRequest,
+    db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(require_permission(permissions.LABELS_PRINT)),
+) -> Response:
+    """Lee el producto de la organización y devuelve un PDF sin escrituras en la base."""
+    product = get_owned(db, Product, payload.product_id, ctx.org_id)
     if product is None:
         raise HTTPException(status_code=404, detail="Producto no encontrado.")
     try:

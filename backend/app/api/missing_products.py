@@ -3,7 +3,10 @@
 Esta lista es operativa: ninguna ruta de este módulo escribe en ``products`` ni
 en el historial de precios. Cuando se recibe un ``product_id`` solo se lee el
 catálogo para validar que la referencia existe; el precio, el código de barras y
-demás campos del producto nunca se copian a la anotación."""
+demás campos del producto nunca se copian a la anotación.
+
+Todo se acota a la organización activa: anotaciones y productos referenciados
+de otra organización se tratan como inexistentes."""
 
 from datetime import datetime, timezone
 from typing import Annotated
@@ -13,6 +16,8 @@ from sqlalchemy import case, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app import permissions
+from app.auth import AuthContext, require_permission
 from app.database import get_db
 from app.models.missing_product import MissingProduct
 from app.models.product import Product
@@ -21,6 +26,7 @@ from app.schemas.missing_product import (
     MissingProductResponse,
     MissingProductUpdate,
 )
+from app.tenancy import get_owned
 
 router = APIRouter(
     prefix="/missing-products",
@@ -34,9 +40,9 @@ def _like_pattern(value: str) -> str:
     return f"%{escaped}%"
 
 
-def _get_or_404(missing_id: int, db: Session) -> MissingProduct:
-    """Recupera la anotación o responde 404 si ya no existe."""
-    record = db.get(MissingProduct, missing_id)
+def _get_or_404(missing_id: int, db: Session, organization_id: str) -> MissingProduct:
+    """Recupera la anotación o responde 404 si no existe en la organización."""
+    record = get_owned(db, MissingProduct, missing_id, organization_id)
     if record is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -45,21 +51,26 @@ def _get_or_404(missing_id: int, db: Session) -> MissingProduct:
     return record
 
 
-def _assert_referenced_product_exists(product_id: int | None, db: Session) -> None:
-    """Si se enlaza un producto, exige que exista; la relación sigue siendo opcional."""
+def _assert_referenced_product_exists(
+    product_id: int | None, db: Session, organization_id: str
+) -> None:
+    """Si se enlaza un producto, exige que exista en la organización; es opcional."""
     if product_id is None:
         return
-    if db.get(Product, product_id) is None:
+    if get_owned(db, Product, product_id, organization_id) is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="El producto referenciado no existe.",
         )
 
 
-def _raise_pending_conflict(product_id: int | None, db: Session) -> None:
+def _raise_pending_conflict(
+    product_id: int | None, db: Session, organization_id: str
+) -> None:
     if product_id is not None:
         existing = db.scalar(
             select(MissingProduct).where(
+                MissingProduct.organization_id == organization_id,
                 MissingProduct.product_id == product_id,
                 MissingProduct.status == "pending",
             )
@@ -81,6 +92,7 @@ def _raise_pending_conflict(product_id: int | None, db: Session) -> None:
 def _commit_missing_product(record: MissingProduct, db: Session) -> None:
     # Retener el destino antes de que rollback expire los atributos del ORM.
     product_id, pending = record.product_id, record.status == "pending"
+    organization_id = record.organization_id
     try:
         db.commit()
     except IntegrityError as error:
@@ -88,18 +100,22 @@ def _commit_missing_product(record: MissingProduct, db: Session) -> None:
         original = error.orig
         constraint = getattr(getattr(original, "diag", None), "constraint_name", None)
         is_pending_conflict = (
-            constraint == "uq_missing_products_pending_product"
+            constraint == "uq_missing_products_org_pending_product"
             or (getattr(original, "sqlite_errorname", None) == "SQLITE_CONSTRAINT_UNIQUE"
-                and str(original) == "UNIQUE constraint failed: missing_products.product_id")
+                and str(original) == (
+                    "UNIQUE constraint failed: missing_products.organization_id, "
+                    "missing_products.product_id"
+                ))
         )
         if pending and is_pending_conflict:
-            _raise_pending_conflict(product_id, db)
+            _raise_pending_conflict(product_id, db, organization_id)
         raise
 
 
 @router.get("", response_model=list[MissingProductResponse])
 def list_missing_products(
     db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(require_permission(permissions.MISSING_MANAGE)),
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=200, ge=1, le=500),
     status_filter: Annotated[
@@ -108,7 +124,9 @@ def list_missing_products(
     search: Annotated[str, Query(max_length=200)] = "",
 ) -> list[MissingProduct]:
     """Lista los faltantes con los pendientes primero y el resto por fecha reciente."""
-    statement = select(MissingProduct)
+    statement = select(MissingProduct).where(
+        MissingProduct.organization_id == ctx.org_id
+    )
     if status_filter in ("pending", "resolved"):
         statement = statement.where(MissingProduct.status == status_filter)
 
@@ -139,17 +157,19 @@ def list_missing_products(
 def create_missing_product(
     payload: MissingProductCreate,
     db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(require_permission(permissions.MISSING_MANAGE)),
 ) -> MissingProduct:
     """Anota un faltante nuevo en estado ``pending``.
 
     Si ya hay un pendiente para el mismo ``product_id`` responde 409 con la
     anotación existente para que el operador la reutilice en vez de duplicar.
     """
-    _assert_referenced_product_exists(payload.product_id, db)
+    _assert_referenced_product_exists(payload.product_id, db, ctx.org_id)
 
-    _raise_pending_conflict(payload.product_id, db)
+    _raise_pending_conflict(payload.product_id, db, ctx.org_id)
 
     record = MissingProduct(
+        organization_id=ctx.org_id,
         name=payload.name,
         product_id=payload.product_id,
         quantity=payload.quantity,
@@ -167,13 +187,14 @@ def update_missing_product(
     missing_id: int,
     payload: MissingProductUpdate,
     db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(require_permission(permissions.MISSING_MANAGE)),
 ) -> MissingProduct:
     """Edita nombre, cantidad, nota, producto vinculado o estado de una anotación."""
-    record = _get_or_404(missing_id, db)
+    record = _get_or_404(missing_id, db, ctx.org_id)
     changes = payload.model_dump(exclude_unset=True)
 
     if "product_id" in changes:
-        _assert_referenced_product_exists(changes["product_id"], db)
+        _assert_referenced_product_exists(changes["product_id"], db, ctx.org_id)
 
     if "status" in changes and changes["status"] != record.status:
         record.status = changes["status"]
@@ -196,8 +217,9 @@ def update_missing_product(
 def delete_missing_product(
     missing_id: int,
     db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(require_permission(permissions.MISSING_MANAGE)),
 ) -> None:
     """Borra definitivamente una anotación de la lista operativa."""
-    record = _get_or_404(missing_id, db)
+    record = _get_or_404(missing_id, db, ctx.org_id)
     db.delete(record)
     db.commit()

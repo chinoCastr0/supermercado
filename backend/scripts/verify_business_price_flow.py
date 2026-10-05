@@ -14,6 +14,16 @@ from app.api.products import create_product, import_products
 from app.database import engine
 from app.models.product import Product
 from app.schemas.product import LabelGenerationRequest, ProductCreate
+from app import permissions
+from app.auth import AuthContext
+
+# Contexto sintético: estos diagnósticos no pasan por HTTP ni por Clerk.
+DIAGNOSTIC_CTX = AuthContext(
+    user_id="user_diagnostico",
+    org_id="org_diagnostico",
+    org_role="org:admin",
+    permissions=permissions.ALL,
+)
 
 
 def pdf_text(content: bytes) -> str:
@@ -39,6 +49,7 @@ with engine.connect() as connection:
                 weight_unit="g",
             ),
             database,
+            DIAGNOSTIC_CTX,
         )
         print(f"1.saved={product.price!r} revision={product.revision}")
 
@@ -51,6 +62,7 @@ with engine.connect() as connection:
         original = generate_labels(
             LabelGenerationRequest(product_ids=[product.id]),
             database,
+            DIAGNOSTIC_CTX,
         )
         batch_id = original.headers["X-Print-Batch-Id"]
         print(f"3.printed_5300={'$ 5.300,00' in pdf_text(original.body)}")
@@ -62,6 +74,7 @@ with engine.connect() as connection:
         import_result = import_products(
             UploadFile(filename="precios.csv", file=BytesIO(csv)),
             database,
+            DIAGNOSTIC_CTX,
         )
         database.refresh(product)
         fields_unchanged = (
@@ -81,6 +94,7 @@ with engine.connect() as connection:
         lower_result = import_products(
             UploadFile(filename="precios.csv", file=BytesIO(lower_csv)),
             database,
+            DIAGNOSTIC_CTX,
         )
         database.refresh(product)
         print(
@@ -89,7 +103,7 @@ with engine.connect() as connection:
             f"barcodes:{lower_result['preserved_price_barcodes']}"
         )
 
-        reprint = reprint_batch_pdf(batch_id, database)
+        reprint = reprint_batch_pdf(batch_id, database, DIAGNOSTIC_CTX)
         print(f"6.reprint_keeps_5300={'$ 5.300,00' in pdf_text(reprint.body)}")
         print(f"7.reprint_byte_identical={reprint.body == original.body}")
     finally:

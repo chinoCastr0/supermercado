@@ -9,6 +9,7 @@ import app.database as database
 import app.models
 from app.api.products import export_register_products
 from app.models.product import Product
+from org_context import ADMIN_A, ORG_A
 from scripts.remove_product_activity import remove_product_activity
 
 
@@ -21,7 +22,7 @@ def legacy_engine():
             "ALTER TABLE products ADD COLUMN active BOOLEAN NOT NULL DEFAULT FALSE"
         ))
     with Session(engine) as db:
-        db.add(Product(barcode="001", name="Leche", price=Decimal("10.00")))
+        db.add(Product(organization_id=ORG_A, barcode="001", name="Leche", price=Decimal("10.00")))
         db.commit()
     yield engine
     engine.dispose()
@@ -49,8 +50,8 @@ def test_explicit_migration_preserves_and_exports_all_products(legacy_engine):
     with legacy_engine.connect() as connection:
         assert connection.execute(text("SELECT id, barcode, name, price FROM products")).all() == before
     with Session(legacy_engine) as db:
-        db.add(Product(barcode="002", name="Pan", price=Decimal("20.00")))
+        db.add(Product(organization_id=ORG_A, barcode="002", name="Pan", price=Decimal("20.00")))
         db.commit()
-        response = export_register_products(db)
+        response = export_register_products(db, ADMIN_A)
         assert response.body[25:40].rstrip() == b"002"
         assert response.body[83:98].rstrip() == b"001"

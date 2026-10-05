@@ -20,14 +20,22 @@ class MissingProduct(Base):
 
     __tablename__ = "missing_products"
     __table_args__ = (
+        # Un único faltante pendiente por producto dentro de cada organización.
         Index(
-            "uq_missing_products_pending_product", "product_id", unique=True,
+            "uq_missing_products_org_pending_product",
+            "organization_id", "product_id", unique=True,
             postgresql_where=text("status = 'pending' AND product_id IS NOT NULL"),
             sqlite_where=text("status = 'pending' AND product_id IS NOT NULL"),
         ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
+
+    organization_id: Mapped[str] = mapped_column(
+        String(64),
+        index=True,
+        nullable=False,
+    )
 
     # Referencia opcional a products; sin FK a propósito (ver docstring del módulo).
     product_id: Mapped[int | None] = mapped_column(

@@ -100,16 +100,20 @@ def get_auth_context(request: Request) -> AuthContext:
     return auth_context_from_payload(state.payload)
 
 
+def ensure_permission(ctx: AuthContext, *permissions: str) -> None:
+    """403 si falta alguno de los permisos; para checks que dependen del body."""
+    if any(not ctx.has(permission) for permission in permissions):
+        raise _forbidden(
+            "permission_denied",
+            "Tu rol en esta organización no permite esta acción.",
+        )
+
+
 def require_permission(*permissions: str) -> Callable[..., AuthContext]:
     """Dependency que exige TODOS los permisos indicados en la organización activa."""
 
     def dependency(ctx: AuthContext = Depends(get_auth_context)) -> AuthContext:
-        missing = [permission for permission in permissions if not ctx.has(permission)]
-        if missing:
-            raise _forbidden(
-                "permission_denied",
-                "Tu rol en esta organización no permite esta acción.",
-            )
+        ensure_permission(ctx, *permissions)
         return ctx
 
     return dependency

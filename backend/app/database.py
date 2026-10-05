@@ -32,8 +32,42 @@ class Base(DeclarativeBase):
     pass
 
 
+# Columnas que agrega migrations/20261003_add_organizations.sql. Sin ellas el
+# aislamiento entre organizaciones no es posible, así que no se arranca.
+ORGANIZATION_COLUMNS = {
+    "products": ("organization_id",),
+    "product_price_changes": ("organization_id", "changed_by"),
+    "print_batches": ("organization_id",),
+    "missing_products": ("organization_id",),
+}
+
+
+def pending_organization_migration() -> list[str]:
+    """Columnas de organización faltantes en tablas existentes (vacía si está al día)."""
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    missing = []
+    for table, required in ORGANIZATION_COLUMNS.items():
+        if table not in tables:
+            continue
+        columns = {column["name"] for column in inspector.get_columns(table)}
+        missing.extend(f"{table}.{name}" for name in required if name not in columns)
+    return missing
+
+
 def initialize_database() -> None:
-    """Crea tablas nuevas y adapta instalaciones anteriores de forma idempotente."""
+    """Crea tablas nuevas y adapta instalaciones anteriores de forma idempotente.
+
+    Una base previa a organizaciones NO se migra automáticamente: asignar todos
+    los datos a una organización exige backup y confirmación explícita, así que
+    el arranque falla con instrucciones antes de ejecutar cualquier DDL."""
+    if missing := pending_organization_migration():
+        raise RuntimeError(
+            "La base no tiene las columnas de organización ("
+            + ", ".join(missing)
+            + "). Hacer pg_dump y ejecutar `python -m scripts.migrate_organizations` "
+            "con BOOTSTRAP_ORGANIZATION_ID (ver docs/DEPLOY_BACKEND.md)."
+        )
     Base.metadata.create_all(bind=engine)
 
     if "products" not in inspect(engine).get_table_names():

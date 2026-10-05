@@ -14,11 +14,13 @@ from sqlalchemy.pool import StaticPool
 
 import app.models
 from app.api.offers import router
+from app.auth import get_auth_context
 from app.database import Base, get_db
 from app.models.product import Product
 from app.models.print_batch import PrintBatch
 from app.services.label_pdf import LabelProductSnapshot
 from app.services.offer_ticket_pdf import build_offer_ticket_pdf
+from org_context import ADMIN_A, ORG_A
 
 
 def sample(barcode="4006381333931"):
@@ -54,12 +56,13 @@ def test_endpoint_validation_and_no_persistence():
     app = FastAPI()
     app.include_router(router)
     with Session(engine) as db:
-        product = Product(barcode="ABC-123", name="Yerba", price=Decimal("2300"))
+        product = Product(organization_id=ORG_A, barcode="ABC-123", name="Yerba", price=Decimal("2300"))
         db.add(product)
         db.commit()
         db.refresh(product)
         before = (product.revision, product.label_version, product.printed_at, product.printed_label_version)
         app.dependency_overrides[get_db] = lambda: db
+        app.dependency_overrides[get_auth_context] = lambda: ADMIN_A
         with TestClient(app) as client:
             payload = {"product_id": product.id, "promo_text": "2x1", "copies": 2}
             response = client.post("/offers/ticket", json=payload)

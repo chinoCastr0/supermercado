@@ -1,6 +1,8 @@
 """Operaciones HTTP de catálogo, precios, importación y exportación.
 
 Las escrituras coordinan producto, historial y versión del cartel en una sesión.
+Toda consulta filtra por la organización activa (ctx.org_id) y cada endpoint
+exige su permiso de Clerk; un id de otra organización responde 404.
 Este módulo todavía mezcla transporte, consultas y reglas de negocio; extraer
 casos de uso antes de agregar otros adaptadores que deban aplicar esas reglas."""
 
@@ -14,6 +16,8 @@ from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app import permissions
+from app.auth import AuthContext, ensure_permission, get_auth_context, require_permission
 from app.database import get_db
 from app.models.price_change import ProductPriceChange
 from app.models.product import Product
@@ -30,6 +34,7 @@ from app.schemas.product import (
 from app.services.excel_import import parse_excel_rows
 from app.services.label_state import mark_label_pending, visible_label_changed
 from app.services.register_export import RegisterExportError, build_presur_file
+from app.tenancy import get_owned
 
 
 router = APIRouter(
@@ -71,9 +76,12 @@ def _search_parts(search: str) -> tuple[list[str], Decimal | None, str | None]:
 def create_product(
     product_data: ProductCreate,
     db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(require_permission(permissions.PRODUCTS_MANAGE)),
 ) -> Product:
-    """Inserta producto e historial inicial en una misma transacción."""
-    product = Product(**product_data.model_dump())
+    """Inserta producto e historial inicial en una misma transacción.
+
+    El precio inicial no es un cambio de precio: alcanza con products:manage."""
+    product = Product(**product_data.model_dump(), organization_id=ctx.org_id)
     try:
         db.add(product)
         db.flush()
@@ -84,6 +92,8 @@ def create_product(
                 old_price=None,
                 new_price=product.price,
                 source="manual_create",
+                organization_id=ctx.org_id,
+                changed_by=ctx.user_id,
             )
         )
         db.commit()
@@ -106,13 +116,14 @@ def create_product(
 )
 def list_products(
     db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(require_permission(permissions.PRODUCTS_READ)),
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=500),
     print_status: str = Query(default="all", pattern="^(all|pending|printed)$"),
     search: Annotated[str, Query(max_length=200)] = "",
 ) -> list[Product]:
     """Filtra y ordena en SQL; devuelve una página limitada sin total global."""
-    statement = select(Product)
+    statement = select(Product).where(Product.organization_id == ctx.org_id)
     if print_status == "printed":
         statement = statement.where(
             and_(
@@ -179,10 +190,15 @@ def list_products(
         }
     },
 )
-def export_register_products(db: Session = Depends(get_db)) -> Response:
-    """Descarga todos los productos en el formato binario de la caja."""
+def export_register_products(
+    db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(require_permission(permissions.EXPORT_REGISTER)),
+) -> Response:
+    """Descarga todos los productos de la organización en el formato de la caja."""
     products = db.scalars(
-        select(Product).order_by(Product.id)
+        select(Product)
+        .where(Product.organization_id == ctx.org_id)
+        .order_by(Product.id)
     ).all()
 
     try:
@@ -207,10 +223,14 @@ def export_register_products(db: Session = Depends(get_db)) -> Response:
 def get_product_by_barcode(
     barcode: str = Query(min_length=1, max_length=50),
     db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(require_permission(permissions.PRODUCTS_READ)),
 ) -> Product:
     """Busca un producto por el valor textual exacto de su código de barras."""
     product = db.scalar(
-        select(Product).where(Product.barcode == barcode.strip())
+        select(Product).where(
+            Product.organization_id == ctx.org_id,
+            Product.barcode == barcode.strip(),
+        )
     )
     if product is None:
         raise HTTPException(
@@ -227,9 +247,10 @@ def get_product_by_barcode(
 def get_product(
     product_id: int,
     db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(require_permission(permissions.PRODUCTS_READ)),
 ) -> Product:
-    """Obtiene la identidad interna o responde 404 si ya no existe."""
-    product = db.get(Product, product_id)
+    """Obtiene la identidad interna o responde 404 si no existe en la organización."""
+    product = get_owned(db, Product, product_id, ctx.org_id)
 
     if product is None:
         raise HTTPException(
@@ -247,12 +268,16 @@ def get_product(
 def get_product_price_history(
     product_id: int,
     db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(require_permission(permissions.PRODUCTS_READ)),
 ) -> list[ProductPriceChange]:
     """Lista eventos incluso si el producto fue borrado; actualmente sin paginar."""
     return list(
         db.scalars(
             select(ProductPriceChange)
-            .where(ProductPriceChange.product_id == product_id)
+            .where(
+                ProductPriceChange.organization_id == ctx.org_id,
+                ProductPriceChange.product_id == product_id,
+            )
             .order_by(ProductPriceChange.id)
         ).all()
     )
@@ -265,13 +290,14 @@ def get_product_price_history(
 def bulk_update_price(
     payload: BulkPriceUpdateRequest,
     db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(require_permission(permissions.PRICES_EDIT)),
 ) -> BulkPriceUpdateResponse:
     """Aplica un precio absoluto solo si todo el lote conserva su revision."""
 
     requested = {item.id: item for item in payload.products}
     products = db.scalars(
         select(Product)
-        .where(Product.id.in_(requested))
+        .where(Product.organization_id == ctx.org_id, Product.id.in_(requested))
         .order_by(Product.id)
         .with_for_update()
     ).all()
@@ -324,6 +350,8 @@ def bulk_update_price(
                 old_price=old_price,
                 new_price=product.price,
                 source="bulk_manual_update",
+                organization_id=ctx.org_id,
+                changed_by=ctx.user_id,
             )
         )
 
@@ -349,13 +377,14 @@ def bulk_update_price(
 def bulk_delete_products(
     payload: BulkDeleteRequest,
     db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(require_permission(permissions.PRODUCTS_MANAGE)),
 ) -> BulkDeleteResponse:
     """Elimina la seleccion completa o no elimina ningun producto."""
 
     requested_ids = set(payload.product_ids)
     products = db.scalars(
         select(Product)
-        .where(Product.id.in_(requested_ids))
+        .where(Product.organization_id == ctx.org_id, Product.id.in_(requested_ids))
         .order_by(Product.id)
         .with_for_update()
     ).all()
@@ -393,11 +422,14 @@ def update_product(
     product_id: int,
     product_data: ProductUpdate,
     db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(get_auth_context),
 ) -> Product:
-    """Bloquea la fila, verifica revisión y audita cambios efectivos de precio."""
-    product = db.scalar(
-        select(Product).where(Product.id == product_id).with_for_update()
-    )
+    """Bloquea la fila, verifica revisión y audita cambios efectivos de precio.
+
+    El permiso depende de lo que cambia: precio exige prices:edit y el resto
+    de los campos products:manage."""
+    ensure_permission(ctx, permissions.PRODUCTS_READ)
+    product = get_owned(db, Product, product_id, ctx.org_id, lock=True)
 
     if product is None:
         raise HTTPException(
@@ -423,6 +455,11 @@ def update_product(
     }
     if not changed_data:
         return product
+
+    if "price" in changed_data:
+        ensure_permission(ctx, permissions.PRICES_EDIT)
+    if set(changed_data) - {"price"}:
+        ensure_permission(ctx, permissions.PRODUCTS_MANAGE)
 
     # El DTO sólo valida el peso y la unidad que llegaron juntos en esta
     # petición; una actualización parcial puede enviar uno solo y dejar el
@@ -452,6 +489,8 @@ def update_product(
                 old_price=old_price,
                 new_price=product.price,
                 source="manual_update",
+                organization_id=ctx.org_id,
+                changed_by=ctx.user_id,
             )
         )
 
@@ -477,9 +516,10 @@ def update_product(
 def delete_product(
     product_id: int,
     db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(require_permission(permissions.PRODUCTS_MANAGE)),
 ) -> None:
     """Borra definitivamente el producto; no verifica la revisión del cliente."""
-    product = db.get(Product, product_id)
+    product = get_owned(db, Product, product_id, ctx.org_id)
 
     if product is None:
         raise HTTPException(
@@ -498,8 +538,12 @@ def delete_product(
 def import_products(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    ctx: AuthContext = Depends(require_permission(permissions.PRODUCTS_MANAGE)),
 ) -> dict[str, int | list[str]]:
-    """Deduplica por barcode y confirma todo junto; sólo aumenta precios existentes."""
+    """Deduplica por barcode y confirma todo junto; sólo aumenta precios existentes.
+
+    Si el archivo sube precios existentes exige además prices:edit; sin ese
+    permiso no se aplica ninguna fila (todo o nada)."""
     if not file.filename:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -539,7 +583,7 @@ def import_products(
         batch = barcodes[start : start + IMPORT_QUERY_BATCH_SIZE]
         products = db.scalars(
             select(Product)
-            .where(Product.barcode.in_(batch))
+            .where(Product.organization_id == ctx.org_id, Product.barcode.in_(batch))
             .with_for_update()
         ).all()
         existing_by_barcode.update(
@@ -567,6 +611,7 @@ def import_products(
                 continue
             product = Product(
                 **validated.model_dump(),
+                organization_id=ctx.org_id,
                 last_updated=row["last_updated"],
             )
             db.add(product)
@@ -594,8 +639,14 @@ def import_products(
                     old_price=old_price,
                     new_price=existing_product.price,
                     source="import_update",
+                    organization_id=ctx.org_id,
+                    changed_by=ctx.user_id,
                 )
             )
+
+    if price_updated_count and not ctx.has(permissions.PRICES_EDIT):
+        db.rollback()
+        ensure_permission(ctx, permissions.PRICES_EDIT)
 
     try:
         db.flush()
@@ -607,6 +658,8 @@ def import_products(
                     old_price=None,
                     new_price=product.price,
                     source="import_create",
+                    organization_id=ctx.org_id,
+                    changed_by=ctx.user_id,
                 )
                 for product in new_products
             ]

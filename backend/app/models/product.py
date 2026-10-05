@@ -7,7 +7,7 @@ validan fuera de este modelo: Numeric fija precisión, no reglas de negocio."""
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import DateTime, Integer, Numeric, String, text
+from sqlalchemy import DateTime, Index, Integer, Numeric, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -17,13 +17,30 @@ class Product(Base):
     """Representa un registro persistido del catálogo de productos."""
 
     __tablename__ = "products"
+    # El código de barras es único dentro de cada organización, no global: dos
+    # negocios pueden vender el mismo artículo. El índice también resuelve las
+    # búsquedas por barcode, que siempre llevan organization_id.
+    __table_args__ = (
+        Index(
+            "uq_products_organization_barcode",
+            "organization_id",
+            "barcode",
+            unique=True,
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
 
+    # ID de organización de Clerk (org_...). Clerk es la fuente de verdad; no
+    # hay tabla local de organizaciones.
+    organization_id: Mapped[str] = mapped_column(
+        String(64),
+        index=True,
+        nullable=False,
+    )
+
     barcode: Mapped[str] = mapped_column(
         String(50),
-        unique=True,
-        index=True,
         nullable=False,
     )
 

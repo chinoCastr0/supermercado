@@ -33,6 +33,7 @@ from app.schemas.product import (
     ProductResponse,
     ProductUpdate,
 )
+from org_context import ADMIN_A, ORG_A
 
 
 def _engine():
@@ -58,7 +59,7 @@ def test_price_1234_56_remains_exact_from_payload_to_refetch_and_edit() -> None:
         received = ProductCreate.model_validate(frontend_payload)
         assert received.price == Decimal("1234.56")
 
-        created = create_product(received, db)
+        created = create_product(received, db, ADMIN_A)
         assert created.price == Decimal("1234.56")
         assert _serialized_price(created) == "1234.56"
 
@@ -67,8 +68,8 @@ def test_price_1234_56_remains_exact_from_payload_to_refetch_and_edit() -> None:
         ).scalar_one()
         assert stored == Decimal("1234.56")
 
-        fetched = get_product(created.id, db)
-        refreshed = list_products(db, skip=0, limit=500, print_status="all")
+        fetched = get_product(created.id, db, ADMIN_A)
+        refreshed = list_products(db, ADMIN_A, skip=0, limit=500, print_status="all")
         assert fetched.price == Decimal("1234.56")
         assert _serialized_price(refreshed[0]) == "1234.56"
 
@@ -80,6 +81,7 @@ def test_price_1234_56_remains_exact_from_payload_to_refetch_and_edit() -> None:
                 price="1234.56",
             ),
             db,
+            ADMIN_A,
         )
         assert edited.price == Decimal("1234.56")
         assert _serialized_price(edited) == "1234.56"
@@ -107,6 +109,7 @@ def test_import_does_not_turn_dot_decimal_into_an_integer_price() -> None:
         result = import_products(
             UploadFile(filename="precios.csv", file=BytesIO(csv)),
             db,
+            ADMIN_A,
         )
         prices = db.scalars(select(Product.price).order_by(Product.barcode)).all()
 
@@ -124,12 +127,14 @@ def test_reimporting_same_barcode_does_not_mutate_the_saved_price() -> None:
                 price="1234.56",
             ),
             db,
+            ADMIN_A,
         )
         csv = b"barcode,name,price\nTRACE-SAME,Producto,1234.56\n"
 
         import_products(
             UploadFile(filename="precios.csv", file=BytesIO(csv)),
             db,
+            ADMIN_A,
         )
         db.refresh(product)
 
@@ -146,10 +151,12 @@ def test_printing_flows_read_price_without_modifying_it() -> None:
                 price="1234.56",
             ),
             db,
+            ADMIN_A,
         )
         response = generate_labels(
             LabelGenerationRequest(product_ids=[product.id]),
             db,
+            ADMIN_A,
         )
         text = PdfReader(BytesIO(response.body)).pages[0].extract_text() or ""
         db.refresh(product)
@@ -159,15 +166,16 @@ def test_printing_flows_read_price_without_modifying_it() -> None:
         set_print_status(
             ProductPrintStatusUpdate(product_ids=[product.id], printed=True),
             db,
+            ADMIN_A,
         )
         db.refresh(product)
         assert product.price == Decimal("1234.56")
 
-        confirm_batch(response.headers["X-Print-Batch-Id"], db)
+        confirm_batch(response.headers["X-Print-Batch-Id"], db, ADMIN_A)
         db.refresh(product)
         assert product.price == Decimal("1234.56")
 
-        register_response = export_register_products(db)
+        register_response = export_register_products(db, ADMIN_A)
         assert len(register_response.body) > 0
         db.refresh(product)
         assert product.price == Decimal("1234.56")
@@ -198,6 +206,7 @@ def test_import_only_increases_existing_prices() -> None:
                 weight_unit="g",
             ),
             db,
+            ADMIN_A,
         )
         csv = (
             b"barcode,name,price,peso,unidad\n"
@@ -207,6 +216,7 @@ def test_import_only_increases_existing_prices() -> None:
         increased = import_products(
             UploadFile(filename="precios.csv", file=BytesIO(csv)),
             db,
+            ADMIN_A,
         )
         db.refresh(product)
         assert product.price == Decimal("7000.00")
@@ -223,6 +233,7 @@ def test_import_only_increases_existing_prices() -> None:
         preserved = import_products(
             UploadFile(filename="precios.csv", file=BytesIO(lower_csv)),
             db,
+            ADMIN_A,
         )
         db.refresh(product)
         assert product.price == Decimal("7000.00")
@@ -235,13 +246,14 @@ def test_import_only_increases_existing_prices() -> None:
         equal = import_products(
             UploadFile(filename="precios.csv", file=BytesIO(csv)),
             db,
+            ADMIN_A,
         )
         db.refresh(product)
         assert product.price == Decimal("7000.00")
         assert equal["price_updated_count"] == 0
         assert equal["preserved_price_barcodes"] == []
 
-        history = get_product_price_history(product.id, db)
+        history = get_product_price_history(product.id, db, ADMIN_A)
         assert [entry.new_price for entry in history] == [
             Decimal("5300.00"),
             Decimal("7000.00"),
@@ -258,6 +270,7 @@ def test_stale_edit_cannot_overwrite_a_newer_price() -> None:
         product = create_product(
             ProductCreate(barcode="STALE-EDIT", name="Producto", price="5300"),
             db,
+            ADMIN_A,
         )
         stale_revision = product.revision
 
@@ -265,6 +278,7 @@ def test_stale_edit_cannot_overwrite_a_newer_price() -> None:
             product.id,
             ProductUpdate(expected_revision=stale_revision, price="6000"),
             db,
+            ADMIN_A,
         )
         assert updated.price == Decimal("6000.00")
 
@@ -273,6 +287,7 @@ def test_stale_edit_cannot_overwrite_a_newer_price() -> None:
                 product.id,
                 ProductUpdate(expected_revision=stale_revision, price="7000"),
                 db,
+                ADMIN_A,
             )
         db.refresh(product)
 
@@ -293,6 +308,7 @@ def test_update_rejects_a_weight_left_without_its_unit() -> None:
                 weight_unit="g",
             ),
             db,
+            ADMIN_A,
         )
 
         with pytest.raises(HTTPException) as error:
@@ -300,6 +316,7 @@ def test_update_rejects_a_weight_left_without_its_unit() -> None:
                 product.id,
                 ProductUpdate(expected_revision=product.revision, weight=None),
                 db,
+                ADMIN_A,
             )
         db.refresh(product)
 
@@ -314,10 +331,12 @@ def test_print_batch_is_an_immutable_snapshot_after_catalog_price_changes() -> N
         product = create_product(
             ProductCreate(barcode="SNAPSHOT", name="Producto", price="7000"),
             db,
+            ADMIN_A,
         )
         original = generate_labels(
             LabelGenerationRequest(product_ids=[product.id]),
             db,
+            ADMIN_A,
         )
         batch_id = original.headers["X-Print-Batch-Id"]
 
@@ -325,9 +344,10 @@ def test_print_batch_is_an_immutable_snapshot_after_catalog_price_changes() -> N
             product.id,
             ProductUpdate(expected_revision=product.revision, price="6000"),
             db,
+            ADMIN_A,
         )
         db.refresh(product)
-        reprinted = reprint_batch_pdf(batch_id, db)
+        reprinted = reprint_batch_pdf(batch_id, db, ADMIN_A)
         original_text = PdfReader(BytesIO(original.body)).pages[0].extract_text() or ""
         reprint_text = PdfReader(BytesIO(reprinted.body)).pages[0].extract_text() or ""
 

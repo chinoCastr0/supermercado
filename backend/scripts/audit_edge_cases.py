@@ -20,6 +20,16 @@ from app.models.product import Product
 from app.money import parse_money
 from app.schemas.product import ProductCreate, ProductUpdate
 from app.services.excel_import import parse_excel_rows
+from app import permissions
+from app.auth import AuthContext
+
+# Contexto sintético: estos diagnósticos no pasan por HTTP ni por Clerk.
+DIAGNOSTIC_CTX = AuthContext(
+    user_id="user_diagnostico",
+    org_id="org_diagnostico",
+    org_role="org:admin",
+    permissions=permissions.ALL,
+)
 
 
 def main() -> None:
@@ -42,29 +52,29 @@ def main() -> None:
         import_products(UploadFile(
             filename="sample.csv",
             file=BytesIO(b"barcode,name,price\n002,ABCDEFGHIJKLMNOPQRST,100\n"),
-        ), db)
+        ), db, DIAGNOSTIC_CTX)
         evidence["imported_name_length"] = len(db.scalar(
             select(Product).where(Product.barcode == "002")
         ).name)
         product = create_product(ProductCreate(
             barcode="003", name="Peso", price="100", weight="0.001", weight_unit="g"
-        ), db)
+        ), db, DIAGNOSTIC_CTX)
         evidence["persisted_small_weight"] = str(product.weight)
         evidence["null_price_accepted_by_dto"] = ProductUpdate(
             expected_revision=1, price=None
         ).model_dump(exclude_unset=True)
         weighted = create_product(ProductCreate(
             barcode="004", name="Peso parcial", price="100", weight="500", weight_unit="g"
-        ), db)
+        ), db, DIAGNOSTIC_CTX)
         update_product(weighted.id, ProductUpdate(
             expected_revision=weighted.revision, weight=None
-        ), db)
+        ), db, DIAGNOSTIC_CTX)
         db.refresh(weighted)
         evidence["partial_weight_update"] = {
             "weight": weighted.weight, "unit": weighted.weight_unit
         }
         # La restricción de precio positivo sólo vive en los DTOs, no en la tabla.
-        db.add(Product(barcode="005", name="Escritura directa", price=Decimal("-1")))
+        db.add(Product(organization_id=DIAGNOSTIC_CTX.org_id, barcode="005", name="Escritura directa", price=Decimal("-1")))
         db.commit()
         evidence["negative_price_persisted"] = str(db.scalar(
             select(Product.price).where(Product.barcode == "005")

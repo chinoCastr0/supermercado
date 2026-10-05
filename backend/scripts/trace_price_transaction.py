@@ -11,6 +11,16 @@ from app.api.products import create_product, get_product, list_products, update_
 from app.database import engine
 from app.models.product import Product
 from app.schemas.product import ProductCreate, ProductResponse, ProductUpdate
+from app import permissions
+from app.auth import AuthContext
+
+# Contexto sintético: estos diagnósticos no pasan por HTTP ni por Clerk.
+DIAGNOSTIC_CTX = AuthContext(
+    user_id="user_diagnostico",
+    org_id="org_diagnostico",
+    org_role="org:admin",
+    permissions=permissions.ALL,
+)
 
 
 # La transacción exterior revierte filas, pero las secuencias PostgreSQL pueden
@@ -32,10 +42,10 @@ with engine.connect() as connection:
         received = ProductCreate.model_validate(payload)
         print(f"3.backend_received={received.price!r} type={type(received.price).__name__}")
 
-        pending = Product(**received.model_dump())
+        pending = Product(**received.model_dump(), organization_id=DIAGNOSTIC_CTX.org_id)
         print(f"4.before_save={pending.price!r} type={type(pending.price).__name__}")
 
-        created = create_product(received, database)
+        created = create_product(received, database, DIAGNOSTIC_CTX)
         print(f"5.after_save={created.price!r} type={type(created.price).__name__}")
 
         stored = connection.execute(
@@ -44,7 +54,7 @@ with engine.connect() as connection:
         ).scalar_one()
         print(f"6.database_direct={stored!r} type={type(stored).__name__}")
 
-        fetched = get_product(created.id, database)
+        fetched = get_product(created.id, database, DIAGNOSTIC_CTX)
         response_price = ProductResponse.model_validate(fetched).model_dump(
             mode="json"
         )["price"]
@@ -54,6 +64,7 @@ with engine.connect() as connection:
         for skip in range(0, 20_000, 500):
             batch = list_products(
                 database,
+                DIAGNOSTIC_CTX,
                 skip=skip,
                 limit=500,
                 print_status="all",
@@ -76,6 +87,7 @@ with engine.connect() as connection:
                 price=response_price,
             ),
             database,
+            DIAGNOSTIC_CTX,
         )
         modal_price = ProductResponse.model_validate(edited).model_dump(mode="json")[
             "price"

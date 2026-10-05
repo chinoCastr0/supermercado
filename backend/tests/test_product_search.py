@@ -8,6 +8,7 @@ import app.models
 from app.api.products import list_products
 from app.database import Base
 from app.models.product import Product
+from org_context import ADMIN_A, ORG_A
 
 
 def _engine():
@@ -18,12 +19,12 @@ def _engine():
 
 def _seed(db: Session) -> list[Product]:
     products = [
-        Product(barcode="000123", name="COCA COLA", price=Decimal("10"), weight=Decimal("500"), weight_unit="ml"),
-        Product(barcode="000124", name="COCA COLA", price=Decimal("20"), weight=Decimal("1.5"), weight_unit="l"),
-        Product(barcode="000125", name="COCA COLA ZERO", price=Decimal("30"), weight=Decimal("500"), weight_unit="ml"),
-        Product(barcode="000126", name="COCA COLA ZERO", price=Decimal("40"), weight=Decimal("2.25"), weight_unit="l"),
-        Product(barcode="000127", name="Galletita Mana", price=Decimal("50"), weight=Decimal("165"), weight_unit="g"),
-        Product(barcode="000128", name="Galletita Mana", price=Decimal("60"), weight=Decimal("300"), weight_unit="g"),
+        Product(organization_id=ORG_A, barcode="000123", name="COCA COLA", price=Decimal("10"), weight=Decimal("500"), weight_unit="ml"),
+        Product(organization_id=ORG_A, barcode="000124", name="COCA COLA", price=Decimal("20"), weight=Decimal("1.5"), weight_unit="l"),
+        Product(organization_id=ORG_A, barcode="000125", name="COCA COLA ZERO", price=Decimal("30"), weight=Decimal("500"), weight_unit="ml"),
+        Product(organization_id=ORG_A, barcode="000126", name="COCA COLA ZERO", price=Decimal("40"), weight=Decimal("2.25"), weight_unit="l"),
+        Product(organization_id=ORG_A, barcode="000127", name="Galletita Mana", price=Decimal("50"), weight=Decimal("165"), weight_unit="g"),
+        Product(organization_id=ORG_A, barcode="000128", name="Galletita Mana", price=Decimal("60"), weight=Decimal("300"), weight_unit="g"),
     ]
     db.add_all(products)
     db.commit()
@@ -39,6 +40,7 @@ def _seed(db: Session) -> list[Product]:
 def _search(db: Session, search: str, **kwargs) -> list[Product]:
     return list_products(
         db,
+        ADMIN_A,
         skip=kwargs.get("skip", 0),
         limit=kwargs.get("limit", 500),
         print_status=kwargs.get("print_status", "all"),
