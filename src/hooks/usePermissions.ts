@@ -1,17 +1,25 @@
 /**
- * Capacidades del usuario en la organización activa, leídas del session token
- * de Clerk mediante `has`. Al cambiar de organización Clerk actualiza el token
- * y este hook vuelve a calcularse.
+ * Capacidades del usuario en la organización activa. Las provee
+ * PermissionsProvider uniendo los permisos del token de Clerk (`has`) con los
+ * efectivos que informa el backend (/me/permissions), que incluyen el rol
+ * local "encargado". Al cambiar de organización AuthGate remonta el provider.
  */
-import { useAuth } from "@clerk/react";
-import {
-  capabilitiesFrom,
-  NO_CAPABILITIES,
-  type Capabilities,
-} from "../utils/permissions";
+import { createContext, useContext } from "react";
+import { NO_CAPABILITIES, type Capabilities } from "../utils/permissions";
 
-export function usePermissions(): Capabilities {
-  const { isLoaded, has } = useAuth();
-  if (!isLoaded || !has) return NO_CAPABILITIES;
-  return capabilitiesFrom((permission) => has({ permission }));
+export type PermissionsState = Capabilities & {
+  /** Rol efectivo (org:admin, org:encargado u org:member). */
+  role: string | null;
+  /** org:admin de Clerk: único que gestiona el equipo. */
+  isAdmin: boolean;
+};
+
+export const PermissionsContext = createContext<PermissionsState>({
+  ...NO_CAPABILITIES,
+  role: null,
+  isAdmin: false,
+});
+
+export function usePermissions(): PermissionsState {
+  return useContext(PermissionsContext);
 }

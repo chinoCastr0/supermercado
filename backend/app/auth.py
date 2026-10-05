@@ -12,7 +12,10 @@ SIN el prefijo `org:`) y `per`/`fpm`, que junto con `fea` codifican los
 permisos personalizados como bitmask. El SDK ya los decodifica en
 `org_id`, `org_role` y `org_permissions`. Los permisos de sistema
 (`org:sys_*`) nunca viajan en el token: el backend sólo puede exigir permisos
-personalizados."""
+personalizados.
+
+El rol "encargado" no existe en Clerk: es una fila en member_roles que
+apply_local_role suma a un org:member (ver app.permissions)."""
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -22,8 +25,12 @@ from typing import Any
 from clerk_backend_api import AuthenticateRequestOptions, Clerk
 from dotenv import load_dotenv
 from fastapi import Depends, HTTPException, Request, status
+from sqlalchemy.orm import Session
 
+from app import permissions as perms
 from app.config import get_allowed_origins
+from app.database import get_db
+from app.models.member_role import MemberRole
 
 load_dotenv()
 
@@ -86,7 +93,24 @@ def auth_context_from_payload(payload: Mapping[str, Any]) -> AuthContext:
     )
 
 
-def get_auth_context(request: Request) -> AuthContext:
+def apply_local_role(ctx: AuthContext, db: Session) -> AuthContext:
+    """Suma el rol local "encargado" a un org:member de Clerk; otros roles no cambian.
+
+    Sólo agrega permisos: un rol local nunca quita permisos ni da los de admin."""
+    if ctx.org_role != perms.MEMBER_ROLE:
+        return ctx
+    local = db.get(MemberRole, (ctx.org_id, ctx.user_id))
+    if local is None or local.role != perms.ENCARGADO_ROLE:
+        return ctx
+    return AuthContext(
+        user_id=ctx.user_id,
+        org_id=ctx.org_id,
+        org_role=perms.ENCARGADO_ROLE,
+        permissions=ctx.permissions | perms.ENCARGADO_EXTRA,
+    )
+
+
+def get_auth_context(request: Request, db: Session = Depends(get_db)) -> AuthContext:
     """Dependency de FastAPI: 401 si la sesión es inválida, 403 sin organización activa."""
     state = _clerk.authenticate_request(
         request,
@@ -97,7 +121,7 @@ def get_auth_context(request: Request) -> AuthContext:
     )
     if not state.is_signed_in or not state.payload:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No autenticado")
-    return auth_context_from_payload(state.payload)
+    return apply_local_role(auth_context_from_payload(state.payload), db)
 
 
 def ensure_permission(ctx: AuthContext, *permissions: str) -> None:
@@ -107,6 +131,16 @@ def ensure_permission(ctx: AuthContext, *permissions: str) -> None:
             "permission_denied",
             "Tu rol en esta organización no permite esta acción.",
         )
+
+
+def require_admin(ctx: AuthContext = Depends(get_auth_context)) -> AuthContext:
+    """Dependency: sólo org:admin de Clerk (quien puede gestionar miembros)."""
+    if ctx.org_role != perms.ADMIN_ROLE:
+        raise _forbidden(
+            "permission_denied",
+            "Sólo un administrador de la organización puede gestionar el equipo.",
+        )
+    return ctx
 
 
 def require_permission(*permissions: str) -> Callable[..., AuthContext]:

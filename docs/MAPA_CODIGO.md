@@ -22,6 +22,8 @@ runbook de migración están en [DEPLOY_BACKEND.md](DEPLOY_BACKEND.md#organizaci
 | `backend/app/main.py` | Composición de rutas/CORS; arranque con DDL y health sin DB (A01/A06) |
 | `backend/app/auth.py` | `AuthContext` desde el token v2 de Clerk; 401/403; `require_permission` y `ensure_permission` |
 | `backend/app/permissions.py` | Constantes de permisos; deben coincidir con Clerk y `src/utils/permissions.ts` |
+| `backend/app/api/members.py` | Equipo (sólo admin) y `/me/permissions`; Clerk detrás de `MembershipDirectory` |
+| `backend/app/models/member_role.py` | Rol local "encargado" por (organización, usuario); suma permisos a un org:member |
 | `backend/app/tenancy.py` | `get_owned`: búsqueda por id acotada a la organización (404 si es ajena) |
 | `backend/app/database.py` | Motor, sesión y adaptación del esquema; falla si falta la migración de organizaciones |
 | `backend/app/money.py` | Parser decimal y convención de separadores; controlar magnitudes (A08) |
@@ -55,7 +57,9 @@ y bloques relevantes, sin contabilizar callbacks triviales como funciones públi
 | `src/App.tsx` | Composición, selección, orden y modales; paginación local y acciones tardías |
 | `src/hooks/useProducts.ts` | Estado remoto y comandos; distinguir invalidación de cancelación |
 | `src/components/AuthGate.tsx` | Sesión → organización (tarea o lista) → app remontada por `orgId` |
-| `src/hooks/usePermissions.ts` | Capacidades desde `has({ permission })` de Clerk |
+| `src/hooks/usePermissions.ts` | Contexto de capacidades, rol efectivo e `isAdmin` |
+| `src/components/PermissionsProvider.tsx` | Une `has()` del token con `/me/permissions` (rol local) |
+| `src/components/TeamView.tsx` | Sección Equipo (admin): asignar Empleado/Encargado |
 | `src/utils/permissions.ts` | Permisos, acceso al formulario y mensajes de 403; lógica pura testeada |
 | `src/api/products.ts` | Transporte HTTP, error y descarga; tipos no validan JSON en runtime |
 | `src/types/product.ts` | Contratos del frontend; sincronizar con los DTOs del backend |
@@ -100,6 +104,7 @@ selección, revisiones, ciclo de carga y recursos para no duplicar cada instrucc
 | `backend/tests/test_register_export.py` | Bytes, orden, límites y exactitud de centavos en caja |
 | `backend/tests/test_auth.py` | Claims v2, 401, 403 sin organización y por permiso |
 | `backend/tests/test_organization_isolation.py` | Aislamiento A/B en cada endpoint, barcode por org, permisos por HTTP |
+| `backend/tests/test_members.py` | Rol local: permisos, sólo admin asigna, aislamiento entre orgs, falla de Clerk |
 | `backend/tests/test_organizations_migration.py` | Migración sobre PostgreSQL con datos previos (requiere `TEST_POSTGRES_URL`) |
 | `tests/money.test.mjs` | Normalización, rechazo y orden monetario |
 | `tests/permissions.test.mjs` | Gating de la UI por rol y mensajes de 403 |
@@ -136,6 +141,7 @@ Propuesta: CLI con `main`, argumentos validados y contexto de base explícito.
 | --- | --- |
 | `backend/migrations/20260827_add_label_printing.sql` | Tablas/versiones de carteles; no incluye snapshots posteriores |
 | `backend/migrations/20260904_price_integrity.sql` | Revisión, snapshots e historial; migración aditiva |
+| `backend/migrations/20261005_add_member_roles.sql` | Tabla `member_roles`; aditiva, también la crea el arranque |
 | `backend/migrations/20261003_add_organizations.sql` | `organization_id`, `changed_by` e índices únicos por organización; lee `app.bootstrap_organization_id` |
 | `backend/requirements.txt` | Dependencias fijadas, runtime y herramientas mezcladas; faltan tests |
 | `backend/.env.example` | Ejemplo público, DATABASE_URL obligatoria; DB_* es referencia sin implementación |

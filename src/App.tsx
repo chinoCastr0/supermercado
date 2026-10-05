@@ -22,6 +22,7 @@ import { ProductFilters } from "./components/ProductFilters";
 import { ProductModal } from "./components/ProductModal";
 import { ProductsTable } from "./components/ProductsTable";
 import { StatsCards } from "./components/StatsCards";
+import { TeamView } from "./components/TeamView";
 import { usePermissions } from "./hooks/usePermissions";
 import { useProducts } from "./hooks/useProducts";
 import { useBarcodeKeyboard } from "./hooks/useBarcodeKeyboard";
@@ -318,6 +319,7 @@ function App() {
       }}
     >
       {view === "faltantes" && <MissingProductsView canManage={can.canManageMissing} />}
+      {view === "equipo" && can.isAdmin && <TeamView />}
       {view === "productos" && (
       <section className="content">
         <div className="page-heading">

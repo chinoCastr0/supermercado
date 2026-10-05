@@ -8,7 +8,7 @@ import type { ReactNode } from "react";
 import { OrganizationSwitcher, UserButton } from "@clerk/react";
 import { usePermissions } from "../hooks/usePermissions";
 
-export type AppView = "productos" | "faltantes";
+export type AppView = "productos" | "faltantes" | "equipo";
 
 type Props = {
   children: ReactNode;
@@ -26,7 +26,7 @@ export function Layout({
   onImport,
   onRefresh,
 }: Props) {
-  const { canManageProducts } = usePermissions();
+  const { canManageProducts, isAdmin } = usePermissions();
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -51,6 +51,16 @@ export function Layout({
           >
             <span>▤</span> Faltantes
           </button>
+          {isAdmin && (
+            <button
+              className={`nav-item ${view === "equipo" ? "active" : ""}`}
+              type="button"
+              aria-current={view === "equipo" ? "page" : undefined}
+              onClick={() => onNavigate("equipo")}
+            >
+              <span>◎</span> Equipo
+            </button>
+          )}
           {canManageProducts && (
             <button className="nav-item" type="button" onClick={onImport}>
               <span>⇧</span> Importar datos
@@ -69,7 +79,11 @@ export function Layout({
           </div>
           <div className="eyebrow">
             <span className="eyebrow-line" />{" "}
-            {view === "faltantes" ? "LISTA DE FALTANTES" : "INVENTARIO GENERAL"}
+            {view === "faltantes"
+              ? "LISTA DE FALTANTES"
+              : view === "equipo"
+                ? "EQUIPO"
+                : "INVENTARIO GENERAL"}
           </div>
           <div className="topbar-actions">
             <button

@@ -98,3 +98,34 @@ export function forbiddenMessage(data: unknown): string {
     return "Tu sesión está desactualizada. Cerrá sesión y volvé a ingresar.";
   return "Tu rol en esta organización no permite esta acción. Pedile acceso a un administrador.";
 }
+
+/** Nombres visibles de los roles (Clerk + rol local "encargado"). */
+export const ROLE_LABELS: Record<string, string> = {
+  "org:admin": "Administrador",
+  "org:encargado": "Encargado",
+  "org:member": "Empleado",
+};
+
+export function roleLabel(role: string): string {
+  return ROLE_LABELS[role] ?? role;
+}
+
+/**
+ * El rol local sólo se asigna a miembros comunes de Clerk que no sean el
+ * propio usuario; los administradores se gestionan en Clerk.
+ */
+export function canAssignLocalRole(member: {
+  clerk_role: string;
+  is_self: boolean;
+}): boolean {
+  return member.clerk_role === "org:member" && !member.is_self;
+}
+
+/** Une los permisos del token de Clerk con los efectivos que informa el backend. */
+export function mergedHas(
+  tokenHas: (permission: string) => boolean,
+  serverPermissions: readonly string[] | null,
+): (permission: string) => boolean {
+  return (permission) =>
+    tokenHas(permission) || Boolean(serverPermissions?.includes(permission));
+}

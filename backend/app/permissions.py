@@ -1,8 +1,11 @@
 """Permisos personalizados de Clerk que exige la API.
 
 Deben coincidir con los creados en Clerk (Dashboard → Organizations → Roles &
-Permissions o `clerk api /organization_permissions`). La tabla rol → permiso
-vive en Clerk y está documentada en docs/DEPLOY_BACKEND.md."""
+Permissions o `clerk api /organization_permissions`). Los permisos de
+org:admin y org:member se asignan en Clerk; "encargado" es un rol local
+(tabla member_roles) que suma ENCARGADO_EXTRA a un org:member, porque el plan
+de Clerk de producción no admite roles personalizados. Tabla completa en
+docs/DEPLOY_BACKEND.md."""
 
 PRODUCTS_READ = "org:products:read"
 PRODUCTS_MANAGE = "org:products:manage"
@@ -21,3 +24,12 @@ ALL = frozenset(
         EXPORT_REGISTER,
     }
 )
+
+# Roles de Clerk (vienen en el token) y rol local (tabla member_roles).
+ADMIN_ROLE = "org:admin"
+MEMBER_ROLE = "org:member"
+ENCARGADO_ROLE = "org:encargado"
+
+# Permisos que el rol local suma a un org:member de Clerk. Nunca incluye
+# administración de miembros: eso sigue siendo exclusivo de org:admin.
+ENCARGADO_EXTRA = frozenset({PRODUCTS_MANAGE, PRICES_EDIT, EXPORT_REGISTER})

@@ -265,7 +265,7 @@ permisos personalizados.
 
 ### Roles y permisos
 
-| Permiso | Habilita | admin | encargado | member |
+| Permiso | Habilita | admin | encargado (local) | member |
 | --- | --- | :-: | :-: | :-: |
 | `org:products:read` | Listar, buscar, detalle, historial, carteles pendientes | ✓ | ✓ | ✓ |
 | `org:products:manage` | Alta, edición sin precio, borrado, importar Excel | ✓ | ✓ | – |
@@ -275,6 +275,28 @@ permisos personalizados.
 | `org:export:register` | Exportar PRESUR1.DAT para la caja | ✓ | ✓ | – |
 | `org:sys_memberships:manage` y demás `sys_*` | Invitar, cambiar roles y quitar miembros; perfil de la org | ✓ | – | – |
 | `org:sys_memberships:read` | Ver la lista de miembros | ✓ | ✓ | ✓ |
+
+**Encargado es un rol local**, no un rol de Clerk: el plan de Clerk de
+producción no admite roles personalizados (`unsupported_subscription_plan_features:
+org:roles`). En Clerk el encargado es un `org:member`, y la tabla `member_roles`
+(`organization_id`, `user_id`, `role`) lo promueve. `apply_local_role` le suma
+`products:manage`, `prices:edit` y `export:register` (`ENCARGADO_EXTRA`). El
+rol local sólo agrega permisos: nunca da administración de miembros.
+
+El admin lo asigna en la sección **Equipo** de la app:
+
+- `GET /members` lista los miembros vía la Backend API de Clerk y borra los
+  roles locales de quien ya no es miembro.
+- `PUT /members/{user_id}/role` asigna `org:member` u `org:encargado`. Sólo
+  `org:admin` puede usarlo, y sólo sobre un `org:member` de Clerk.
+- `GET /me/permissions` informa los permisos efectivos al frontend, que no
+  puede leer el rol local desde el token.
+
+El cambio rige en el backend en el request siguiente; la interfaz del empleado
+lo refleja al recargar. Invitar, quitar miembros y nombrar admins sigue en
+Clerk («Gestionar» del selector de organización). No hace falta webhook: sin
+membresía en Clerk no hay token de esa organización, así que una fila local
+vieja no da acceso.
 
 Una importación que sube precios existentes exige `products:manage` **y**
 `prices:edit`; sin el segundo no se aplica ninguna fila. El precio inicial de
@@ -289,14 +311,21 @@ Configuración de la instancia, igual en desarrollo y producción:
   (`force_organization_selection: true`) y slugs habilitados
   (`slug_disabled: false`).
 - **Role set** `role_set:default`: creator role `org:admin` y default role
-  `org:member`. Incluye `org:encargado`.
+  `org:member`. No hace falta ningún rol personalizado; desarrollo tiene un
+  `org:encargado` de Clerk sin miembros, creado antes de pasar al rol local,
+  que no se usa.
 - **Session token v2**: es el formato por defecto en instancias nuevas.
   Comprobarlo con un token real (claim `v: 2`).
 
 Desarrollo ya está configurado (2026-10-03). Allí la organización "Leandro
 Supermercado" es `org_3KCqHeTYeiYJ3KTHOXRtNhIjIW9` y su admin es
-`leandrodaniel3786@gmail.com`. **Producción está pendiente** y requiere
-confirmación explícita.
+`leandrodaniel3786@gmail.com`.
+
+En producción (2026-10-05) ya están hechos los pasos 0–3: Organizations y
+slugs habilitados, los seis permisos creados y asignados a admin y member.
+`clerk enable orgs` deja *Membership required* activado por defecto; conviene
+desactivarlo hasta desplegar el frontend nuevo y activarlo en el deploy.
+Falta crear la organización inicial (paso 5).
 
 Pasos para producción con el CLI de Clerk (`clerk link` ya apunta a la app
 "Supermercado"). En Git Bash anteponer `MSYS_NO_PATHCONV=1` y redirigir
@@ -314,10 +343,7 @@ clerk api /organization_permissions --instance prod -X POST \
   -d '{"name":"Ver productos","key":"org:products:read","description":"..."}'
 # 3. Asignar permisos a los roles existentes (ids con: clerk api /organization_roles --instance prod).
 clerk api /organization_roles/<role_id>/permissions/<perm_id> --instance prod -X POST -d '{}'
-# 4. Rol encargado dentro del role set inicial.
-clerk api /organization_roles --instance prod -X POST -d '{"name":"Encargado",
-  "key":"org:encargado","permissions":["<perm_ids...>","<perm sys_memberships:read>"],
-  "include_in_initial_role_set":true}'
+# 4. (Sin rol encargado en Clerk: es local, ver «Roles y permisos».)
 # 5. Organización inicial con el usuario de producción como creador (queda org:admin).
 clerk api '/users?email_address=leandrodaniel3786@gmail.com' --instance prod
 clerk api /organizations --instance prod -X POST \
@@ -330,14 +356,14 @@ Equivalente en el Dashboard, si no se usa el CLI:
 
 1. **Organizations → Settings**: Enable, Membership required, Allow slugs.
 2. **Roles & Permissions → Permissions**: crear los seis permisos de la tabla.
-3. **Roles**: editar Admin y Member, y crear Encargado
-   (`org:encargado`) con los permisos de la tabla.
+3. **Roles**: asignar a Admin y Member los permisos de la tabla.
 4. **Role sets**: comprobar que el creator role sea Admin y el default role
    Member.
 5. **Organizations → Create**: "Leandro Supermercado", slug
    `leandro-supermercado`, con el usuario como admin.
 
-El límite de miembros por organización está en 5 (`max_allowed_memberships`);
+En desarrollo el límite de miembros por organización es 5, y en producción 20
+(`max_allowed_memberships`);
 ampliarlo con `clerk config patch` si hace falta. Con Billing deshabilitado los
 permisos no dependen de Features.
 

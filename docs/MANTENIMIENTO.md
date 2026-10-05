@@ -122,6 +122,11 @@ sólo guarda `organization_id` en cada fila. Reglas para mantener el aislamiento
   [DEPLOY_BACKEND.md](DEPLOY_BACKEND.md#roles-y-permisos). Un usuario con
   sesión abierta recibe el permiso nuevo cuando se renueva su token (~1 minuto)
   o cuando vuelve a ingresar.
+- **Rol local "encargado":** vive en `member_roles` porque el plan de Clerk
+  no admite roles personalizados. Si se mejora el plan, se puede migrar a un
+  rol de Clerk `org:encargado` con los mismos permisos y borrar la tabla; el
+  backend ya acepta ese rol desde el token. Un rol local nuevo sólo puede
+  sumar permisos, nunca los de administración de miembros.
 - **Tabla nueva con datos del negocio:** debe tener `organization_id NOT NULL`
   con índice, o heredarlo por FK de una tabla que lo tenga. Las unicidades se
   definen por organización, nunca globales.

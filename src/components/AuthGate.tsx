@@ -21,6 +21,7 @@ import {
   useAuth,
   useClerk,
 } from "@clerk/react";
+import { PermissionsProvider } from "./PermissionsProvider";
 
 type Props = { children: ReactNode };
 
@@ -58,5 +59,9 @@ export function AuthGate({ children }: Props) {
     );
   }
 
-  return <Fragment key={orgId}>{children}</Fragment>;
+  return (
+    <Fragment key={orgId}>
+      <PermissionsProvider>{children}</PermissionsProvider>
+    </Fragment>
+  );
 }

@@ -8,10 +8,13 @@ import test from "node:test";
 import {
   NO_CAPABILITIES,
   PERMISSIONS,
+  canAssignLocalRole,
   canOpenProduct,
   capabilitiesFrom,
   forbiddenMessage,
+  mergedHas,
   productFormAccess,
+  roleLabel,
 } from "../src/utils/permissions.ts";
 
 const roles = {
@@ -102,4 +105,31 @@ test("el 403 del backend se traduce según su código", () => {
     /volvé a ingresar/,
   );
   assert.match(forbiddenMessage(null), /no permite esta acción/);
+});
+
+test("el encargado local suma permisos a los del token de Clerk", () => {
+  const memberToken = (permission) => roles.member.includes(permission);
+  const serverPermissions = [
+    ...roles.member,
+    PERMISSIONS.productsManage,
+    PERMISSIONS.pricesEdit,
+    PERMISSIONS.exportRegister,
+  ];
+  const encargado = capabilitiesFrom(mergedHas(memberToken, serverPermissions));
+  assert.ok(Object.values(encargado).every(Boolean));
+  // Mientras el backend no respondió, sólo valen los del token.
+  assert.deepEqual(capabilitiesFrom(mergedHas(memberToken, null)), capabilitiesOf("member"));
+});
+
+test("el rol local sólo se asigna a empleados que no son uno mismo", () => {
+  assert.equal(canAssignLocalRole({ clerk_role: "org:member", is_self: false }), true);
+  assert.equal(canAssignLocalRole({ clerk_role: "org:member", is_self: true }), false);
+  assert.equal(canAssignLocalRole({ clerk_role: "org:admin", is_self: false }), false);
+});
+
+test("los roles se muestran con nombre en castellano", () => {
+  assert.equal(roleLabel("org:encargado"), "Encargado");
+  assert.equal(roleLabel("org:member"), "Empleado");
+  assert.equal(roleLabel("org:admin"), "Administrador");
+  assert.equal(roleLabel("org:otro"), "org:otro");
 });

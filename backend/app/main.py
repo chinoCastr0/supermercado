@@ -14,6 +14,7 @@ from app.api.products import router as products_router
 from app.api.labels import router as labels_router
 from app.api.offers import router as offers_router
 from app.api.missing_products import router as missing_products_router
+from app.api.members import router as members_router
 from app.auth import get_auth_context
 from app.config import get_allowed_origins
 from app.database import initialize_database
@@ -49,6 +50,7 @@ app.include_router(products_router, dependencies=_auth)
 app.include_router(labels_router, dependencies=_auth)
 app.include_router(offers_router, dependencies=_auth)
 app.include_router(missing_products_router, dependencies=_auth)
+app.include_router(members_router, dependencies=_auth)
 
 
 @app.get("/")
