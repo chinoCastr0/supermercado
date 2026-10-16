@@ -370,6 +370,20 @@ permisos no dependen de Features.
 
 ### Runbook: migración de datos en el VPS
 
+**Ejecutado en producción el 2026-10-16.**
+
+- Datos migrados a `org_3KIQfIfAwaqduAqpzqI7if77nm9`: 9949 productos, 1046 cambios de precio, 72 lotes (1878 ítems) y 10 faltantes. Conteos verificados y 0 filas sin organización.
+- Backup previo: `backups/postgres-pre-orgs-20261016T133836Z.dump` (260 KB). Se probó su restauración en un contenedor descartable. Hay una copia fuera del VPS.
+- Imagen anterior conservada como `supermercado-backend:pre-orgs`.
+- Respaldo del `.env` previo: `.env.bak-pre-orgs`, ignorado por Git.
+- Backend detenido unos 4 minutos.
+- Frontend desplegado por Vercel al hacer push.
+- "Membership required" activado en Clerk producción después del deploy.
+
+**Atención:** los dumps anteriores del VPS (`postgres-2026092*`, `postgres-20261002*`) pesan 906 bytes. No contienen los datos y no sirven para restaurar. Revisar cómo se generaron.
+
+**Al ejecutar por SSH:** no pasar el runbook entero por `ssh ... 'bash -s' < script`. El primer `docker compose run -T` lee el resto del script por stdin y los pasos siguientes no se ejecutan. Correr cada paso por separado, con `< /dev/null` en los comandos que no necesitan stdin.
+
 Requiere el OK explícito del responsable. Se ejecuta antes de que el backend
 nuevo arranque, porque éste se niega a iniciar sobre una base sin columnas de
 organización (`initialize_database` falla y explica qué hacer).
