@@ -1,3 +1,4 @@
+/** Lector físico y enrutamiento explícito dentro de diálogos. */
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createBarcodeKeyboardReader } from "../src/utils/barcodeKeyboard.ts";
@@ -92,4 +93,39 @@ test("descarta una rafaga sin Enter antes de una nueva lectura", () => {
   s.key("1");
   s.key("Enter");
   assert.deepEqual(s.codes, ["001"]);
+});
+
+test("el hook acepta el diálogo de consulta y sigue ignorando otros diálogos", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const { stripTypeScriptTypes } = await import("node:module");
+  let source = stripTypeScriptTypes(await readFile(new URL("../src/hooks/useBarcodeKeyboard.ts", import.meta.url), "utf8"));
+  source = source.replace('import { useEffect, useRef } from "react";', "const { useEffect, useRef } = globalThis.__barcodeTest;")
+    .replace('import { createBarcodeKeyboardReader } from "../utils/barcodeKeyboard";', "const { createBarcodeKeyboardReader } = globalThis.__barcodeTest;");
+  const previous = { window: globalThis.window, HTMLElement: globalThis.HTMLElement, HTMLInputElement: globalThis.HTMLInputElement };
+  let handler;
+  const cleanups = [];
+  class Element {
+    constructor(allowed = false) { this.allowed = allowed; }
+    closest(selector) { return selector === "[role='dialog']" ? this : null; }
+    querySelector() { return this.allowed ? {} : null; }
+  }
+  globalThis.window = { addEventListener: (_, fn) => { handler = fn; }, removeEventListener: () => {} };
+  globalThis.HTMLElement = Element;
+  globalThis.HTMLInputElement = class extends Element {};
+  globalThis.__barcodeTest = { createBarcodeKeyboardReader, useRef: (current) => ({ current }), useEffect: (fn) => { const cleanup = fn(); if (cleanup) cleanups.push(cleanup); } };
+  try {
+    const { useBarcodeKeyboard } = await import("data:text/javascript;base64," + Buffer.from(source).toString("base64"));
+    const codes = [];
+    useBarcodeKeyboard(true, async (code) => { codes.push(code); }, { allowDialog: true, queue: true });
+    let timeStamp = 0;
+    const scan = (target) => { for (const key of [..."12345", "Enter"]) handler({ target, key, timeStamp: timeStamp += 10, preventDefault() {} }); };
+    scan(new Element(false));
+    assert.deepEqual(codes, []);
+    scan(new Element(true));
+    assert.deepEqual(codes, ["12345"]);
+  } finally {
+    cleanups.forEach((fn) => fn());
+    Object.assign(globalThis, previous);
+    delete globalThis.__barcodeTest;
+  }
 });

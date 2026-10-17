@@ -142,7 +142,7 @@ def my_permissions(ctx: AuthContext = Depends(get_auth_context)) -> MyPermission
         user_id=ctx.user_id,
         organization_id=ctx.org_id,
         role=ctx.org_role,
-        permissions=sorted(ctx.permissions),
+        permissions=sorted(ctx.effective_permissions),
     )
 
 

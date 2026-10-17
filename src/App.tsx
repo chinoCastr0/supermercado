@@ -7,7 +7,7 @@
  */
 import { Skeleton } from "./components/Skeleton";
 import { useAuth } from "@clerk/react";
-import { CashRegisterView } from "./components/CashRegisterView";
+import { CashView } from "./components/CashView";
 import { Icon } from "./components/Icon";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
@@ -323,7 +323,7 @@ function App() {
         if (view === "productos") void inventory.load();
       }}
     >
-      {view === "caja" && can.canReadProducts && userId && orgId && <CashRegisterView key={`${userId}:${orgId}`} storageKey={`cash-register:v1:${userId}:${orgId}`} />}
+      {view === "caja" && can.canReadProducts && userId && orgId && <CashView key={`${userId}:${orgId}`} storageKey={`cash-register:v1:${userId}:${orgId}`} />}
       {view === "faltantes" && <MissingProductsView canManage={can.canManageMissing} />}
       {view === "equipo" && can.isAdmin && <TeamView />}
       {view === "productos" && (

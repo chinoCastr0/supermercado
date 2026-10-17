@@ -6,6 +6,9 @@
  */
 
 export const PERMISSIONS = {
+  salesCreate: "org:sales:create",
+  salesRead: "org:sales:read",
+  closuresManage: "org:closures:manage",
   productsRead: "org:products:read",
   productsManage: "org:products:manage",
   pricesEdit: "org:prices:edit",
@@ -15,6 +18,9 @@ export const PERMISSIONS = {
 } as const;
 
 export type Capabilities = {
+  canCreateSales: boolean;
+  canReadSales: boolean;
+  canManageClosures: boolean;
   canReadProducts: boolean;
   canManageProducts: boolean;
   canEditPrices: boolean;
@@ -25,6 +31,7 @@ export type Capabilities = {
 
 /** Sin sesión u organización cargada: nada habilitado. */
 export const NO_CAPABILITIES: Capabilities = {
+  canCreateSales: false, canReadSales: false, canManageClosures: false,
   canReadProducts: false,
   canManageProducts: false,
   canEditPrices: false,
@@ -38,6 +45,9 @@ export function capabilitiesFrom(
   has: (permission: string) => boolean,
 ): Capabilities {
   return {
+    canCreateSales: has(PERMISSIONS.salesCreate),
+    canReadSales: has(PERMISSIONS.salesRead),
+    canManageClosures: has(PERMISSIONS.closuresManage),
     canReadProducts: has(PERMISSIONS.productsRead),
     canManageProducts: has(PERMISSIONS.productsManage),
     canEditPrices: has(PERMISSIONS.pricesEdit),

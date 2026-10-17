@@ -21,6 +21,7 @@ const roles = {
   admin: Object.values(PERMISSIONS),
   encargado: Object.values(PERMISSIONS),
   member: [
+    PERMISSIONS.salesCreate, PERMISSIONS.salesRead,
     PERMISSIONS.productsRead,
     PERMISSIONS.labelsPrint,
     PERMISSIONS.missingManage,
@@ -31,17 +32,21 @@ const capabilitiesOf = (role) =>
 
 test("los permisos coinciden con los creados en Clerk y en el backend", () => {
   assert.deepEqual(Object.values(PERMISSIONS).sort(), [
+    "org:closures:manage",
     "org:export:register",
     "org:labels:print",
     "org:missing:manage",
     "org:prices:edit",
     "org:products:manage",
     "org:products:read",
+    "org:sales:create",
+    "org:sales:read",
   ]);
 });
 
 test("el empleado lee, imprime y anota faltantes, pero no cambia precios ni borra", () => {
   assert.deepEqual(capabilitiesOf("member"), {
+    canCreateSales: true, canReadSales: true, canManageClosures: false,
     canReadProducts: true,
     canManageProducts: false,
     canEditPrices: false,
@@ -114,6 +119,7 @@ test("el encargado local suma permisos a los del token de Clerk", () => {
     PERMISSIONS.productsManage,
     PERMISSIONS.pricesEdit,
     PERMISSIONS.exportRegister,
+    PERMISSIONS.closuresManage,
   ];
   const encargado = capabilitiesFrom(mergedHas(memberToken, serverPermissions));
   assert.ok(Object.values(encargado).every(Boolean));

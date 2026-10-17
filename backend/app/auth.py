@@ -51,9 +51,16 @@ class AuthContext:
     org_role: str
     permissions: frozenset[str]
 
+    @property
+    def effective_permissions(self) -> frozenset[str]:
+        """Une permisos explícitos con las capacidades de Caja del administrador."""
+        if self.org_role == perms.ADMIN_ROLE:
+            return self.permissions | perms.ADMIN_EXTRA
+        return self.permissions
+
     def has(self, permission: str) -> bool:
         """Indica si el rol del usuario en la organización activa otorga el permiso."""
-        return permission in self.permissions
+        return permission in self.effective_permissions
 
 
 def _forbidden(code: str, message: str) -> HTTPException:

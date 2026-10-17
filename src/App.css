@@ -359,3 +359,31 @@ tbody tr:has(input[type="checkbox"]:checked) { background: var(--accent-soft); }
   .cash-line { grid-template-columns: minmax(0, 1fr) 76px minmax(0, 1fr); }
   .cash-line .button { grid-column: 3; }
 }
+
+/* Caja: manuales, consulta, historial y cierre diario. */
+.cash-tabs, .cash-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.cash-tabs { padding: var(--space-4) var(--space-5) 0; }
+.cash-sale-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+.cash-manual { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: end; padding-block: var(--space-3); }
+.cash-manual label { flex: 1 1 130px; display: grid; gap: var(--space-1); }
+.cash-manual input { width: 100%; }
+.cash-finalize { margin-top: var(--space-4); }
+.price-result { padding-block: var(--space-5); overflow-wrap: anywhere; }
+.price-result strong { font-size: clamp(32px, 5vw, 56px); }
+.cash-sale { padding: var(--space-4); margin-bottom: var(--space-3); }
+.cash-sale summary { cursor: pointer; font-weight: 600; overflow-wrap: anywhere; }
+.cash-sale small { display: block; color: var(--muted); font-weight: normal; }
+.cash-sale-item { display: flex; justify-content: space-between; gap: var(--space-3); padding-block: var(--space-3); border-bottom: 1px solid var(--line); }
+.closure-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+.amount-group, .closure-summary { padding: var(--space-4); min-width: 0; }
+.amount-row { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); }
+.amount-row label { display: grid; gap: var(--space-1); flex: 1; min-width: 0; }
+.amount-row input { width: 100%; }
+.closure-summary { margin-top: var(--space-4); }
+input[aria-invalid="true"] { border-color: var(--error); }
+@media (max-width: 600px) {
+  .closure-groups { grid-template-columns: minmax(0, 1fr); }
+  .cash-tabs { padding-inline: var(--space-4); }
+  .cash-finalize > .button { width: 100%; }
+  .cash-register { padding-bottom: calc(48dvh + 80px); }
+}

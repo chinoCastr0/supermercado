@@ -18,3 +18,6 @@ __all__ = [
     "Product",
     "ProductPriceChange",
 ]
+
+from app.models.sale import Sale, SaleItem
+from app.models.cash_closure import CashClosure

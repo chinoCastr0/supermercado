@@ -1,3 +1,4 @@
+/** Un único lector de teclado; diálogos habilitados sólo de forma explícita. */
 import { useEffect, useRef } from "react";
 import { createBarcodeKeyboardReader } from "../utils/barcodeKeyboard";
 
@@ -7,6 +8,7 @@ export function useBarcodeKeyboard(
   onBarcode: (barcode: string) => Promise<unknown>,
   options?: {
     queue?: boolean;
+    allowDialog?: boolean;
     allowTextSearch?: boolean;
     restoreEditable?: (target: HTMLInputElement, value: string) => void;
   },
@@ -46,7 +48,7 @@ export function useBarcodeKeyboard(
         });
       }
       if (target instanceof HTMLElement && !isSearch && !isCashEdit &&
-        (target.isContentEditable || target.closest("input, textarea, select, [role='dialog']"))) return;
+        (target.isContentEditable || target.closest("input, textarea, select") || (target.closest("[role='dialog']") && !(optionsRef.current?.allowDialog && target.closest("[role='dialog']")?.querySelector("[data-barcode-dialog]"))))) return;
       if (isCashEdit && event.key.length === 1 &&
           (!edit || edit.target !== target || event.timeStamp - edit.time > 35)) {
         edit = { target, value: target.value, time: event.timeStamp };
