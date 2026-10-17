@@ -47,7 +47,7 @@ def test_admin_can_use_cash_without_new_clerk_permissions(api):
     ctx = AuthContext("admin", "org_a", "org:admin", frozenset())
     identity["ctx"] = ctx
     assert set(my_permissions(ctx).permissions) == permissions.ADMIN_EXTRA
-    assert not ctx.has(permissions.PRODUCTS_MANAGE)
+    assert ctx.has(permissions.PRODUCTS_MANAGE)
     sale = client.post("/sales", json=payload())
     assert sale.status_code == 201, sale.text
     assert client.get("/sales").status_code == 200
@@ -58,8 +58,10 @@ def test_admin_can_use_cash_without_new_clerk_permissions(api):
 @pytest.mark.parametrize("role", ["org:member", "org:encargado"])
 def test_other_roles_do_not_inherit_admin_cash_permissions(role):
     ctx = AuthContext("user", "org_a", role, frozenset())
-    assert not ctx.effective_permissions
-    assert not ctx.has(permissions.SALES_CREATE)
+    assert ctx.has(permissions.SALES_CREATE)
+    assert ctx.has(permissions.SALES_READ) == (role == "org:encargado")
+    assert ctx.has(permissions.CLOSURES_MANAGE) == (role == "org:encargado")
+    assert not ctx.has("org:sys_memberships:manage")
 
 def test_idempotency_and_recalculation(api):
     client, db, _ = api
@@ -104,7 +106,7 @@ def test_organization_isolation_and_scoped_idempotency(api):
 ])
 def test_permissions_403(api, path, method, body):
     client, _, identity = api
-    identity["ctx"] = AuthContext("member", "org_a", "org:member", frozenset())
+    identity["ctx"] = AuthContext("viewer", "org_a", "org:viewer", frozenset())
     kwargs = {"json": body} if body is not None else {}
     assert getattr(client, method)(path, **kwargs).status_code == 403
 
@@ -149,3 +151,29 @@ def test_date_timezone_and_empty_history(api, monkeypatch):
     client, _, _ = api
     assert client.post("/sales", json=payload()).json()["date"] == "2026-10-17"
     assert client.get("/sales?date=2026-10-16").json()["sales"] == []
+
+def test_member_sells_but_cannot_read_history_or_close(api):
+    client, _, identity = api
+    identity["ctx"] = AuthContext("employee", "org_new", "org:member", frozenset())
+    sale = client.post("/sales", json=payload())
+    assert sale.status_code == 201, sale.text
+    assert client.get("/sales").status_code == 403
+    path = "/cash-closures/" + sale.json()["date"]
+    assert client.get(path).status_code == 403
+    assert client.put(path, json=amounts()).status_code == 403
+    assert client.post(path + "/confirm").status_code == 403
+
+def test_local_encargado_sells_reads_and_closes(api):
+    from app.auth import apply_local_role
+    from app.models.member_role import MemberRole
+    client, db, identity = api
+    db.add(MemberRole(organization_id="org_new", user_id="boss", role="org:encargado", updated_by="admin"))
+    db.commit()
+    identity["ctx"] = apply_local_role(AuthContext("boss", "org_new", "org:member", frozenset()), db)
+    sale = client.post("/sales", json=payload())
+    assert sale.status_code == 201, sale.text
+    assert client.get("/sales").status_code == 200
+    path = "/cash-closures/" + sale.json()["date"]
+    assert client.put(path, json=amounts("0.30")).status_code == 200
+    assert client.post(path + "/confirm").status_code == 200
+    assert client.post(path + "/reopen").status_code == 403

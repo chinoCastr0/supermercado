@@ -1,11 +1,10 @@
 """Permisos personalizados de Clerk que exige la API.
 
-Deben coincidir con los creados en Clerk (Dashboard → Organizations → Roles &
-Permissions o `clerk api /organization_permissions`). Los permisos de
-org:admin y org:member se asignan en Clerk; "encargado" es un rol local
-(tabla member_roles) que suma ENCARGADO_EXTRA a un org:member, porque el plan
-de Clerk de producción no admite roles personalizados. Tabla completa en
-docs/DEPLOY_BACKEND.md."""
+Las claves existentes pueden venir en Clerk; los extras de aplicación se
+otorgan por rol verificado mediante ROLE_EXTRAS. Caja no requiere crear permisos
+nuevos en Clerk. "encargado" es un rol local (tabla member_roles) de un org:member,
+porque el plan de Clerk de producción no admite roles personalizados. Tabla
+completa en docs/DEPLOY_BACKEND.md y espejo en src/utils/permissions.ts."""
 
 PRODUCTS_READ = "org:products:read"
 PRODUCTS_MANAGE = "org:products:manage"
@@ -35,10 +34,17 @@ ADMIN_ROLE = "org:admin"
 MEMBER_ROLE = "org:member"
 ENCARGADO_ROLE = "org:encargado"
 
-# Caja concede estas capacidades al admin verificado sin depender de que los
-# permisos nuevos ya estén presentes en su token. No amplía otros permisos.
-ADMIN_EXTRA = frozenset({SALES_CREATE, SALES_READ, CLOSURES_MANAGE})
+# Permisos de aplicación por rol verificado; no requieren configuración en Clerk.
+# Mantener esta tabla idéntica a ROLE_EXTRAS en src/utils/permissions.ts.
+ADMIN_EXTRA = ALL
+MEMBER_EXTRA = frozenset({SALES_CREATE})
 
 # Permisos que el rol local suma a un org:member de Clerk. Nunca incluye
 # administración de miembros: eso sigue siendo exclusivo de org:admin.
-ENCARGADO_EXTRA = frozenset({PRODUCTS_MANAGE, PRICES_EDIT, EXPORT_REGISTER, CLOSURES_MANAGE})
+ENCARGADO_EXTRA = frozenset({PRODUCTS_MANAGE, PRICES_EDIT, EXPORT_REGISTER, SALES_CREATE, SALES_READ, CLOSURES_MANAGE})
+
+ROLE_EXTRAS = {
+    ADMIN_ROLE: ADMIN_EXTRA,
+    MEMBER_ROLE: MEMBER_EXTRA,
+    ENCARGADO_ROLE: ENCARGADO_EXTRA,
+}

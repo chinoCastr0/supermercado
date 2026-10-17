@@ -73,7 +73,7 @@ export function CashRegisterView({ storageKey }: { storageKey: string }) {
   return (
     <section className="content cash-register" aria-label="Caja">
       <div className="page-heading">
-        <div><h1>Caja</h1><p>Escaneá productos y calculá el vuelto. Registrá ventas y consultá el cierre diario.</p></div>
+        <div><h1>Caja</h1></div>
         <button className="button secondary" disabled={cash.saving || cash.submitted} onClick={reset}>Nueva venta</button>
       </div>
       <button disabled={cash.saving || cash.submitted} className="button secondary" onClick={() => { setCode(""); setMode("consulta"); }}>Consultar precio</button>
@@ -89,10 +89,9 @@ export function CashRegisterView({ storageKey }: { storageKey: string }) {
             </div>
           </div>
           <ManualProductForm onAdd={cash.addManual} />
-          <p className="keyboard-hint"><kbd>Esc</kbd> limpiar código · <kbd>F2</kbd> paga con · <kbd>Enter</kbd> aplicar pago</p>
-          <p className="cash-feedback" role="status">{cash.notice || "Listo para escanear."} {cash.pending > 0 && `Consultando ${cash.pending}…`}</p>
+          {(cash.notice || cash.pending > 0) && <p className="cash-feedback" role="status">{cash.notice} {cash.pending > 0 && `Consultando ${cash.pending}…`}</p>}
           <div className="cash-lines data-card" ref={listRef} aria-label="Productos de la venta">
-            {!cash.lines.length && <div className="state-panel"><h2>Tu próxima venta empieza acá</h2><p>Usá el lector, ingresá un código o abrí la cámara.</p></div>}
+            {!cash.lines.length && <div className="state-panel"><h2>Tu próxima venta empieza acá</h2></div>}
             {cash.lines.map((line) => (
               <article key={line.lineId} className={`cash-line ${line.kind === "product" && cash.highlight === line.productId ? "cash-highlight" : ""}`}>
                 <div className="cash-product-name"><strong>{line.name}</strong><small>{line.barcode}</small></div>
@@ -125,18 +124,17 @@ export function CashRegisterView({ storageKey }: { storageKey: string }) {
         <aside className="cash-payment data-card" aria-label="Total y pago">
           <div className="cash-total"><span>Total · {articleCount(cash.lines)} {articleCount(cash.lines) === "1" ? "artículo" : "artículos"}</span><strong>{formatMoney(cash.total)}</strong></div>
           <fieldset className="cash-sale-fields" disabled={cash.saving || cash.submitted}>
-          <form onSubmit={(event) => { event.preventDefault(); focusScanner(); }}>
-            <label htmlFor="cash-paid">Paga con <kbd>F2</kbd></label>
-            <div className="cash-pay-input"><input id="cash-paid" ref={paidRef} data-barcode-edit inputMode="decimal" autoComplete="off" placeholder="0,00"
+          <div className="cash-payment-fields">
+            <label htmlFor="cash-paid">Paga con</label>
+            <input id="cash-paid" ref={paidRef} data-barcode-edit inputMode="decimal" autoComplete="off" placeholder="0,00"
               value={cash.paid} onChange={(event) => { cash.setPaid(event.target.value); }}
               onBlur={(event) => { if (!event.relatedTarget) focusScanner(); }} />
-              <button className="button primary" type="submit" disabled={!balance?.enough || !cash.lines.length || cash.pending > 0}>Aplicar pago</button></div>
             <div className="cash-quick">
               <button type="button" className="button secondary" onClick={() => { cash.setPaid(formatMoney(cash.total).replace("$ ", "")); focusScanner(); }}>Justo</button>
               {["1000", "2000", "5000", "10000", "20000"].map((amount) => <button type="button" className="button secondary" key={amount}
                 onClick={() => { cash.setPaid(amount); focusScanner(); }}>{formatMoney(`${amount}.00`).replace(",00", "")}</button>)}
             </div>
-          </form>
+          </div>
           </fieldset>
           <div className={`cash-balance ${balance?.enough ? "cash-enough" : "cash-short"}`} role="status">
             {balance ? <><span>{balance.enough ? "Vuelto" : "Faltan"}</span><strong>{formatMoney(balance.amount)}</strong></>

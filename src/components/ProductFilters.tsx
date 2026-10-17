@@ -41,9 +41,7 @@ export function ProductFilters({
           onChange={(event) => onQueryChange(event.target.value)}
           placeholder="Buscar nombre, peso o código..."
           aria-label="Buscar productos"
-          aria-describedby="barcode-search-hint"
         />
-        <kbd title="Abrir código numérico">Enter</kbd>
       </label>
       <select
         value={printStatus}

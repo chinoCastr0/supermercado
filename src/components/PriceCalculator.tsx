@@ -1,3 +1,4 @@
+/** Cálculo inmediato del precio desde costo y porcentajes persistidos. */
 import { useState } from "react";
 import { calculateFinalPrice } from "../utils/priceCalculator";
 import { readPricePercentages, savePricePercentages } from "../utils/pricePreferences";
@@ -41,7 +42,6 @@ export function PriceCalculator({ onCalculate, autoFocusCost = false }: Props) {
             recalculate(event.target.value, percentages);
           }}
           placeholder="Ej. 1.000,00"
-          aria-describedby="price-calculator-hint"
         />
       </label>
       <div className="price-percentages">
@@ -66,10 +66,6 @@ export function PriceCalculator({ onCalculate, autoFocusCost = false }: Props) {
           />
         </label>
       </div>
-      <p id="price-calculator-hint" className="price-calculator-hint">
-        La ganancia se aplica sobre el costo con impuestos. Los porcentajes se recuerdan para el próximo producto.
-        {" "}Redondeo a centenas: hasta $40 baja; más de $40 sube.
-      </p>
       {calculation?.error && <p className="form-error" role="status">{calculation.error}</p>}
     </fieldset>
   );

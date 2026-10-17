@@ -1,5 +1,50 @@
 # VPS COMMANDS
 
+## Diagnóstico y actualización de Caja (pendiente de ejecutar)
+
+Estos comandos son para una sesión Bash en el VPS, **sólo después de la
+autorización del responsable**. No se ejecutaron durante la corrección de Caja.
+Publicar primero los cambios revisados. Conservar el proyecto/volumen Compose
+existente y cumplir la comprobación de backups de este documento antes de migrar.
+
+```bash
+cd /opt/apps/supermercado
+# Diagnóstico de versión del checkout, código del contenedor y tablas existentes.
+git log -1 --oneline
+git status --short
+docker compose ps
+docker compose exec -T backend python -c 'from app import permissions as p; print({role: sorted(values) for role, values in p.ROLE_EXTRAS.items()})'
+docker compose exec -T database sh -c 'exec psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL'
+SELECT to_regclass('public.sales') AS sales,
+       to_regclass('public.sale_items') AS sale_items,
+       to_regclass('public.cash_closures') AS cash_closures;
+SQL
+```
+
+Si falta ROLE_EXTRAS o el contenedor muestra una tabla antigua de permisos,
+hay que actualizar el backend. Si alguna tabla SQL devuelve NULL, falta la
+migración. No se puede concluir que ésa sea la causa en producción sin ejecutar
+estas comprobaciones o inspeccionar la respuesta de una sesión autenticada.
+
+```bash
+# Con autorización, checkout limpio y backup verificado según este documento:
+git pull --ff-only
+test -f backend/migrations/20261017_add_sales_cash_closures.sql
+docker compose exec -T database sh -c 'exec psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
+  < backend/migrations/20261017_add_sales_cash_closures.sql
+docker compose build backend
+docker compose up -d --no-deps --wait --wait-timeout 180 backend
+curl --connect-timeout 10 --max-time 20 -fsS https://api.supermercado.leacastro.dev/health
+docker compose exec -T backend python -c 'from app import permissions as p; assert p.SALES_CREATE in p.MEMBER_EXTRA; assert p.SALES_READ not in p.MEMBER_EXTRA; assert p.SALES_READ in p.ENCARGADO_EXTRA; print("OK: permisos de Caja actualizados")'
+```
+
+Publicar también el frontend actualizado en su hosting y recargar la página.
+Con la sesión real del administrador, revisar GET /me/permissions en Network:
+debe responder 200, el organization_id activo, rol org:admin y las capacidades
+de aplicación. Una venta de prueba autorizada debe responder POST /sales 201.
+No compartir ni registrar el token de sesión. Un botón habilitado no garantiza
+que el backend remoto tenga el deploy o las tablas actualizados.
+
 Objetivo: `https://api.supermercado.leacastro.dev`, VPS `149.34.226.101`, frontend
 `https://supermercado.leacastro.dev`. Ejecutar con Bash en Ubuntu 24.04.
 

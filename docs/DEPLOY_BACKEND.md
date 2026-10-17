@@ -273,6 +273,10 @@ permisos personalizados.
 | `org:labels:print` | Generar, reimprimir y confirmar carteles; marcar impreso; ticket de oferta | ✓ | ✓ | ✓ |
 | `org:missing:manage` | Ver, crear, editar, resolver y borrar faltantes | ✓ | ✓ | ✓ |
 | `org:export:register` | Exportar PRESUR1.DAT para la caja | ✓ | ✓ | – |
+| `org:sales:create` | Finalizar ventas | ✓ | ✓ | ✓ |
+| `org:sales:read` | Historial de ventas del día | ✓ | ✓ | – |
+| `org:closures:manage` | Consultar, guardar y confirmar cierres | ✓ | ✓ | – |
+| Rol `org:admin` | Reabrir cierres | ✓ | – | – |
 | `org:sys_memberships:manage` y demás `sys_*` | Invitar, cambiar roles y quitar miembros; perfil de la org | ✓ | – | – |
 | `org:sys_memberships:read` | Ver la lista de miembros | ✓ | ✓ | ✓ |
 
@@ -280,8 +284,18 @@ permisos personalizados.
 producción no admite roles personalizados (`unsupported_subscription_plan_features:
 org:roles`). En Clerk el encargado es un `org:member`, y la tabla `member_roles`
 (`organization_id`, `user_id`, `role`) lo promueve. `apply_local_role` le suma
-`products:manage`, `prices:edit` y `export:register` (`ENCARGADO_EXTRA`). El
+`products:manage`, `prices:edit`, `export:register`, `sales:create`, `sales:read`
+y `closures:manage` (`ENCARGADO_EXTRA`). El
 rol local sólo agrega permisos: nunca da administración de miembros.
+
+Las capacidades nuevas de Caja no necesitan permisos creados en Clerk:
+`MEMBER_EXTRA` concede `sales:create`; `ADMIN_EXTRA` concede todas las capacidades
+de aplicación (`ALL`). Los permisos `sys_*` siguen siendo de Clerk y no se agregan
+por esta regla. `AuthContext.effective_permissions` y la función pura
+`effectivePermissions` del frontend usan la misma tabla `ROLE_EXTRAS`.
+La interfaz no espera /me/permissions para reconocer admin/member, pero sí para
+reconocer un encargado local. Cambiar de organización invalida la respuesta
+anterior; si la consulta falla hay un aviso y un botón para reintentar.
 
 El admin lo asigna en la sección **Equipo** de la app:
 

@@ -17,6 +17,26 @@ export const PERMISSIONS = {
   exportRegister: "org:export:register",
 } as const;
 
+/** Misma tabla que app/permissions.py; el encargado local lo informa el servidor. */
+export const ROLE_EXTRAS: Readonly<Record<string, readonly string[]>> = {
+  "org:admin": Object.values(PERMISSIONS),
+  "org:member": [PERMISSIONS.salesCreate],
+  "org:encargado": [PERMISSIONS.productsManage, PERMISSIONS.pricesEdit,
+    PERMISSIONS.exportRegister, PERMISSIONS.salesCreate, PERMISSIONS.salesRead,
+    PERMISSIONS.closuresManage],
+};
+
+/** Capacidades por rol aun con la respuesta de permisos pendiente o fallida. */
+export function effectivePermissions(
+  role: string | null,
+  tokenHas: (permission: string) => boolean,
+  serverPermissions: readonly string[] | null,
+): (permission: string) => boolean {
+  if (!role) return () => false;
+  const explicitHas = mergedHas(tokenHas, serverPermissions);
+  return (permission) => explicitHas(permission) || Boolean(ROLE_EXTRAS[role]?.includes(permission));
+}
+
 export type Capabilities = {
   canCreateSales: boolean;
   canReadSales: boolean;

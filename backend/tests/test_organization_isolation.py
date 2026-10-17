@@ -290,7 +290,9 @@ def test_member_cannot_import(seeded):
 
 def test_import_price_increase_requires_prices_edit_and_is_all_or_nothing(seeded):
     engine, _, _ = seeded
-    catalog_only = ctx_for(ORG_A, permissions.ALL - {permissions.PRICES_EDIT})
+    # El admin ahora recibe ALL por rol; para probar un permiso ausente usamos
+    # un empleado con permisos explícitos de catálogo, pero sin prices:edit.
+    catalog_only = ctx_for(ORG_A, permissions.ALL - {permissions.PRICES_EDIT}, role="org:member")
     csv = f"codigo,descripcion,precio\n{BARCODE},Sube,9000\nNUEVO-1,Nuevo,10\n".encode()
     with _client(engine, catalog_only) as client:
         response = client.post("/products/import",

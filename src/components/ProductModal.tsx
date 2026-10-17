@@ -238,7 +238,6 @@ export function ProductModal({
             }}
             placeholder="Ej. 1.234,56"
           />
-          <small className="field-hint">Podés ajustarlo manualmente antes de guardar.</small>
         </label>
         {validationError && (
           <p id="productmodal-error" className="form-error" role="alert">

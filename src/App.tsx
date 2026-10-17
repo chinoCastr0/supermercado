@@ -323,7 +323,7 @@ function App() {
         if (view === "productos") void inventory.load();
       }}
     >
-      {view === "caja" && can.canReadProducts && userId && orgId && <CashView key={`${userId}:${orgId}`} storageKey={`cash-register:v1:${userId}:${orgId}`} />}
+      {view === "caja" && (can.canReadProducts || can.canCreateSales) && userId && orgId && <CashView key={`${userId}:${orgId}`} storageKey={`cash-register:v1:${userId}:${orgId}`} />}
       {view === "faltantes" && <MissingProductsView canManage={can.canManageMissing} />}
       {view === "equipo" && can.isAdmin && <TeamView />}
       {view === "productos" && (
@@ -378,7 +378,6 @@ function App() {
           />
         )}
         {inventory.isLoading ? <Skeleton label="Cargando indicadores" rows={1} /> : <StatsCards products={inventory.products} />}
-        <p className="keyboard-hint" id="barcode-search-hint">Lector USB/Bluetooth disponible. En la búsqueda, ingresá un código y presioná <kbd>Enter</kbd>.</p>
         <section className="data-card" aria-labelledby="table-title">
           <div className="print-toolbar">
             <div>

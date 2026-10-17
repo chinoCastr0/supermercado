@@ -28,7 +28,7 @@ export function Layout({
   onImport,
   onRefresh,
 }: Props) {
-  const { canManageProducts, canReadProducts, isAdmin } = usePermissions();
+  const { canManageProducts, canReadProducts, canCreateSales, isAdmin } = usePermissions();
   return (
     <div className="app-shell">
       <a className="skip-link" href="#contenido">Saltar al contenido</a>
@@ -39,7 +39,7 @@ export function Layout({
         </div>
         <p className="nav-caption">Espacio de trabajo</p>
         <nav aria-label="Navegación principal">
-          {canReadProducts && <button
+          {(canReadProducts || canCreateSales) && <button
             className={`nav-item ${view === "caja" ? "active" : ""}`}
             type="button" aria-current={view === "caja" ? "page" : undefined}
             onClick={() => onNavigate("caja")}

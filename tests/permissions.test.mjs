@@ -13,6 +13,8 @@ import {
   capabilitiesFrom,
   forbiddenMessage,
   mergedHas,
+  effectivePermissions,
+  ROLE_EXTRAS,
   productFormAccess,
   roleLabel,
 } from "../src/utils/permissions.ts";
@@ -138,4 +140,30 @@ test("los roles se muestran con nombre en castellano", () => {
   assert.equal(roleLabel("org:member"), "Empleado");
   assert.equal(roleLabel("org:admin"), "Administrador");
   assert.equal(roleLabel("org:otro"), "org:otro");
+});
+
+test("admin tiene todas las capacidades sin respuesta del servidor ni permisos Clerk", () => {
+  for (const server of [null, []]) {
+    assert.ok(Object.values(capabilitiesFrom(effectivePermissions("org:admin", () => false, server))).every(Boolean));
+  }
+});
+test("empleado vende y encargado agrega historial y cierre", () => {
+  const member = capabilitiesFrom(effectivePermissions("org:member", () => false, null));
+  assert.equal(member.canCreateSales, true);
+  assert.equal(member.canReadSales, false);
+  assert.equal(member.canManageClosures, false);
+  const boss = capabilitiesFrom(effectivePermissions("org:encargado", () => false, []));
+  assert.equal(boss.canCreateSales, true);
+  assert.equal(boss.canReadSales, true);
+  assert.equal(boss.canManageClosures, true);
+  assert.equal(effectivePermissions("org:encargado", () => false, [])("org:sys_memberships:manage"), false);
+});
+test("sin rol no se conservan capacidades de una sesión anterior", () => {
+  assert.deepEqual(capabilitiesFrom(effectivePermissions(null, () => true, Object.values(PERMISSIONS))), NO_CAPABILITIES);
+  assert.equal(effectivePermissions("org:viewer", () => false, null)(PERMISSIONS.salesCreate), false);
+});
+test("permisos explícitos y extras por rol se unen sin perder permisos existentes", () => {
+  const has = effectivePermissions("org:member", (p) => p === PERMISSIONS.productsRead, [PERMISSIONS.labelsPrint]);
+  for (const key of [PERMISSIONS.productsRead, PERMISSIONS.labelsPrint, PERMISSIONS.salesCreate]) assert.equal(has(key), true);
+  assert.deepEqual(ROLE_EXTRAS["org:member"], [PERMISSIONS.salesCreate]);
 });

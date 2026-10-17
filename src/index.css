@@ -24,6 +24,10 @@
   --text-lg: 1rem; --text-xl: 1.25rem; --text-2xl: 1.75rem; --text-3xl: 2rem;
   --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
   --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-10: 40px; --space-12: 48px;
+  --sidebar-width: calc(var(--space-8) * 7);
+  --page-gutter: var(--space-8); --card-padding: var(--space-6);
+  --section-gap: var(--space-6); --form-gap: var(--space-4);
+  --control-height: 44px;
   --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px; --radius-full: 999px;
   --duration-fast: 150ms; --duration-normal: 180ms; --ease: cubic-bezier(.2,.8,.2,1);
   --shadow-color: #09090b;
@@ -83,11 +87,22 @@ h1, h2, h3 { line-height: 1.25; font-weight: 600; }
 h1 { font-size: var(--text-2xl); letter-spacing: -.8px; margin-bottom: var(--space-2); }
 h2 { font-size: var(--text-lg); margin-bottom: var(--space-1); }
 h3 { font-size: var(--text-lg); }
-code, kbd { font-family: var(--font-ui); font-variant-numeric: tabular-nums; }
+code { font-family: var(--font-ui); font-variant-numeric: tabular-nums; }
 code { font-size: var(--text-xs); color: var(--muted); overflow-wrap: anywhere; }
-kbd { padding: 2px var(--space-1); border: 1px solid var(--border-strong); border-bottom-width: 2px; border-radius: var(--radius-sm); background: var(--surface); font-size: var(--text-xs); }
 table, .price, .stat-card strong, .bulk-summary, .bulk-price-change, .pagination { font-variant-numeric: tabular-nums; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* Espaciado compartido: sólo múltiplos de la escala base 4. */
+@media (max-width: 1050px) {
+  :root { --sidebar-width: calc(var(--space-12) * 4 + var(--space-1)); --page-gutter: var(--space-6); --card-padding: var(--space-5); --section-gap: var(--space-5); --form-gap: var(--space-3); }
+}
+@media (max-width: 760px) {
+  :root { --page-gutter: var(--space-5); --card-padding: var(--space-4); --section-gap: var(--space-5); --form-gap: var(--space-3); }
+}
+@media (max-width: 470px) {
+  :root { --page-gutter: var(--space-4); --card-padding: var(--space-4); --section-gap: var(--space-4); --form-gap: var(--space-3); }
+}
+input:not([type="checkbox"]):not([type="radio"]), select { min-height: var(--control-height); }
