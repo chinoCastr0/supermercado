@@ -3,6 +3,7 @@
  * La sesión y el bloqueo de lectura evitan resultados repetidos durante consultas.
  * El desmontaje detiene los controles y las pistas de video para liberar la cámara.
  */
+import { Icon } from "./Icon";
 import {
   BarcodeFormat,
   BrowserMultiFormatReader,
@@ -186,7 +187,7 @@ export function BarcodeScanner({
           <h2 id="barcode-scanner-title">Escanear código</h2>
         </div>
         <button type="button" onClick={onClose} aria-label="Cerrar scanner">
-          ×
+          <Icon name="close" />
         </button>
       </div>
 

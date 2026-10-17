@@ -1,14 +1,16 @@
 /**
  * Navegación y estructura persistente que envuelve el contenido mediante children.
- * El texto de conexión es estático: no refleja el estado real de PostgreSQL.
+ * La marca y el tema son consistentes entre escritorio y navegación móvil.
  * La navegación entre secciones es local (sin router): el padre controla `view`.
  * OrganizationSwitcher cambia la organización activa; AuthGate remonta la app.
  */
+import { Icon } from "./Icon";
+import { ThemeToggle } from "./ThemeToggle";
 import type { ReactNode } from "react";
 import { OrganizationSwitcher, UserButton } from "@clerk/react";
 import { usePermissions } from "../hooks/usePermissions";
 
-export type AppView = "productos" | "faltantes" | "equipo";
+export type AppView = "productos" | "faltantes" | "equipo" | "caja";
 
 type Props = {
   children: ReactNode;
@@ -26,22 +28,29 @@ export function Layout({
   onImport,
   onRefresh,
 }: Props) {
-  const { canManageProducts, isAdmin } = usePermissions();
+  const { canManageProducts, canReadProducts, isAdmin } = usePermissions();
   return (
     <div className="app-shell">
+      <a className="skip-link" href="#contenido">Saltar al contenido</a>
       <aside className="sidebar">
         <div className="brand">
-          <span className="brand-mark"></span>
-          <span>Gestión del negocio</span>
+          <span className="brand-mark"><Icon name="box" /></span>
+          <span>Supermercado</span>
         </div>
+        <p className="nav-caption">Espacio de trabajo</p>
         <nav aria-label="Navegación principal">
+          {canReadProducts && <button
+            className={`nav-item ${view === "caja" ? "active" : ""}`}
+            type="button" aria-current={view === "caja" ? "page" : undefined}
+            onClick={() => onNavigate("caja")}
+          ><span><Icon name="scan" /></span> Caja</button>}
           <button
             className={`nav-item ${view === "productos" ? "active" : ""}`}
             type="button"
             aria-current={view === "productos" ? "page" : undefined}
             onClick={() => onNavigate("productos")}
           >
-            <span>◦</span> Productos
+            <span><Icon name="box" /></span> Productos
           </button>
           <button
             className={`nav-item ${view === "faltantes" ? "active" : ""}`}
@@ -49,7 +58,7 @@ export function Layout({
             aria-current={view === "faltantes" ? "page" : undefined}
             onClick={() => onNavigate("faltantes")}
           >
-            <span>▤</span> Faltantes
+            <span><Icon name="list" /></span> Faltantes
           </button>
           {isAdmin && (
             <button
@@ -58,50 +67,62 @@ export function Layout({
               aria-current={view === "equipo" ? "page" : undefined}
               onClick={() => onNavigate("equipo")}
             >
-              <span>◎</span> Equipo
-            </button>
-          )}
-          {canManageProducts && (
-            <button className="nav-item" type="button" onClick={onImport}>
-              <span>⇧</span> Importar datos
+              <span><Icon name="users" /></span> Equipo
             </button>
           )}
         </nav>
+          {canManageProducts && (
+            <div className="sidebar-tools">
+            <button className="nav-item" type="button" onClick={onImport}>
+              <span><Icon name="upload" /></span> Importar datos
+            </button>
+            </div>
+          )}
         <div className="sidebar-foot">
-          <span className="connection-dot" /> Base de datos conectada
+          Inventario y gestión diaria
         </div>
       </aside>
       <main className="main-content" id="productos">
         <header className="topbar">
           <div className="mobile-brand">
-            <span className="brand-mark">S</span>
+            <span className="brand-mark"><Icon name="box" /></span>
             <span>Supermercado</span>
           </div>
-          <div className="eyebrow">
-            <span className="eyebrow-line" />{" "}
-            {view === "faltantes"
-              ? "LISTA DE FALTANTES"
+          <div className="topbar-title">
+            {view === "caja" ? "Caja" : view === "faltantes"
+              ? "Faltantes"
               : view === "equipo"
-                ? "EQUIPO"
-                : "INVENTARIO GENERAL"}
+                ? "Equipo"
+                : "Productos"}
           </div>
           <div className="topbar-actions">
+            <ThemeToggle />
+            {view === "productos" && (
             <button
               className="icon-button"
               type="button"
               aria-label="Actualizar"
               onClick={onRefresh}
             >
-              ↻
+              <Icon name="refresh" />
             </button>
+            )}
+            <UserButton />
+          </div>
+          <div className="topbar-workspace">
             {/* Invitar, cambiar roles y quitar miembros aparecen dentro del
                 perfil de la organización sólo con org:sys_memberships:manage
                 (admin); el resto ve la lista de miembros en modo lectura. */}
-            <OrganizationSwitcher hidePersonal />
-            <UserButton />
+            <OrganizationSwitcher hidePersonal appearance={{ elements: {
+              rootBox: { width: "100%", minWidth: 0 },
+              organizationSwitcherTrigger: { width: "100%", maxWidth: "100%", minWidth: 0, minHeight: "44px" },
+              organizationPreview: { minWidth: 0, flex: 1 },
+              organizationPreviewTextContainer: { minWidth: 0, flex: 1 },
+              organizationPreviewMainIdentifier: { display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+            } }} />
           </div>
         </header>
-        {children}
+        <div id="contenido" tabIndex={-1}>{children}</div>
       </main>
     </div>
   );

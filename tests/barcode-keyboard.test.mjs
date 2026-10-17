@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createBarcodeKeyboardReader } from "../src/utils/barcodeKeyboard.ts";
 
-function setup() {
+function setup(options) {
   const codes = [];
   let prevented = 0;
   let time = 0;
-  const reader = createBarcodeKeyboardReader((code) => codes.push(code));
+  const reader = createBarcodeKeyboardReader((code) => codes.push(code), options);
   const key = (key, delay = 10, searchValue, extras = {}) => {
     time += delay;
     reader({ key, timeStamp: time, preventDefault: () => prevented++, ...extras }, searchValue);
@@ -17,6 +17,21 @@ function setup() {
   };
   return { codes, key, scan, prevented: () => prevented };
 }
+
+test("Caja admite códigos alfanuméricos manuales sin cambiar el inventario", () => {
+  const s = setup({ allowTextSearch: true });
+  s.key("Enter", 200, " ABC123 ");
+  assert.deepEqual(s.codes, ["ABC123"]);
+});
+
+test("campos de caja exigen ráfaga rápida y dejan confirmar un pago manual", () => {
+  const s = setup({ maxInterval: 35 });
+  for (const char of "1500") s.key(char, 80);
+  s.key("Enter", 80);
+  assert.deepEqual(s.codes, []);
+  s.scan("7790000000001");
+  assert.deepEqual(s.codes, ["7790000000001"]);
+});
 
 test("el lector fisico entrega el barcode completo conservando ceros iniciales", () => {
   const s = setup();

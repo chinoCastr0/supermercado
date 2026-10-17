@@ -13,6 +13,8 @@
  * vuelve a cargar con el token de la nueva organización. Así ningún dato de la
  * organización anterior queda en pantalla.
  */
+import { ThemeToggle } from "./ThemeToggle";
+import { Skeleton } from "./Skeleton";
 import { Fragment, type ReactNode } from "react";
 import {
   OrganizationList,
@@ -33,11 +35,12 @@ export function AuthGate({ children }: Props) {
   });
   const clerk = useClerk();
 
-  if (!isLoaded) return null;
+  if (!isLoaded) return <div className="auth-gate"><Skeleton label="Cargando sesión" rows={3} /></div>;
 
   if (clerk.session?.currentTask?.key === "choose-organization") {
     return (
       <div className="auth-gate">
+        <div className="auth-theme"><ThemeToggle /></div>
         <TaskChooseOrganization redirectUrlComplete="/" />
       </div>
     );
@@ -46,6 +49,7 @@ export function AuthGate({ children }: Props) {
   if (!isSignedIn) {
     return (
       <div className="auth-gate">
+        <div className="auth-theme"><ThemeToggle /></div>
         <SignIn />
       </div>
     );
@@ -54,6 +58,7 @@ export function AuthGate({ children }: Props) {
   if (!orgId) {
     return (
       <div className="auth-gate">
+        <div className="auth-theme"><ThemeToggle /></div>
         <OrganizationList hidePersonal />
       </div>
     );

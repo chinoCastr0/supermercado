@@ -3,6 +3,7 @@
  * accept orienta el selector del navegador; las restricciones reales pertenecen
  * al servidor. Elegir otro archivo limpia el estado visual de envío.
  */
+import { Icon } from "./Icon";
 import { useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import { Modal } from "./Modal";
@@ -31,7 +32,7 @@ export function ImportModal({ error, isSaving, onClose, onImport }: Props) {
           <h2 id="import-modal-title">Importar productos</h2>
         </div>
         <button type="button" onClick={onClose} aria-label="Cerrar">
-          ×
+          <Icon name="close" />
         </button>
       </div>
       <p className="modal-description">
@@ -51,7 +52,7 @@ export function ImportModal({ error, isSaving, onClose, onImport }: Props) {
         type="button"
         onClick={() => fileInput.current?.click()}
       >
-        <span className="upload-icon">⇧</span>
+        <span className="upload-icon"><Icon name="upload" /></span>
         <strong>{file ? file.name : "Seleccionar archivo"}</strong>
         <small>
           {file
@@ -80,7 +81,7 @@ export function ImportModal({ error, isSaving, onClose, onImport }: Props) {
         </button>
         <button
           className="button primary"
-          disabled={!file || isSaving}
+          aria-busy={isSaving} disabled={!file || isSaving}
           type="button"
           onClick={() => void submit()}
         >

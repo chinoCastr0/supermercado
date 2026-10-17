@@ -2,6 +2,7 @@
  * Controles de búsqueda, estado y orden administrados por el componente padre.
  * Los cambios se notifican por callbacks; el debounce se aplica fuera del formulario.
  */
+import { Icon } from "./Icon";
 import type { Ref } from "react";
 import type {
   PrintFilter,
@@ -31,15 +32,18 @@ export function ProductFilters({
   return (
     <div className="filters">
       <label className="search">
-        <span>⌕</span>
+        <span><Icon name="search" /></span>
         <input
+          id="product-search"
           ref={searchInputRef}
           data-barcode-search
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
           placeholder="Buscar nombre, peso o código..."
           aria-label="Buscar productos"
+          aria-describedby="barcode-search-hint"
         />
+        <kbd title="Abrir código numérico">Enter</kbd>
       </label>
       <select
         value={printStatus}

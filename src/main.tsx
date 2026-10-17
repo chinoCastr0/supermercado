@@ -4,6 +4,7 @@
  * PATRÓN: es el Composition Root del frontend; aquí se ensamblan dependencias
  * globales. La elección de React StrictMode es una solución técnica concreta.
  */
+import { clerkAppearance } from "./components/clerkAppearance";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { ClerkProvider } from "@clerk/react";
@@ -26,7 +27,7 @@ if ("serviceWorker" in navigator && import.meta.env.PROD) {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <ClerkProvider publishableKey={clerkPublishableKey} afterSignOutUrl="/">
+    <ClerkProvider appearance={clerkAppearance} publishableKey={clerkPublishableKey} afterSignOutUrl="/">
       <AuthGate>
         <App />
       </AuthGate>

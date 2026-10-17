@@ -1,4 +1,5 @@
 /** Edición transitoria de la promoción y vista previa, con limpieza de URLs blob. */
+import { Icon } from "./Icon";
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { offersApi } from "../api/offers";
@@ -51,13 +52,14 @@ export function OfferTicketModal({ product, onClose }: { product: Product; onClo
         <span className="modal-kicker">A4 APAISADA · 2 × 2</span>
         <h2 id="offer-ticket-title">Crear oferta</h2>
       </div>
-      <button type="button" onClick={onClose} disabled={isGenerating} aria-label="Volver al producto">×</button>
+      <button type="button" onClick={onClose} aria-busy={isGenerating} disabled={isGenerating} aria-label="Volver al producto">
+          <Icon name="close" />
+        </button>
     </div>
     <p className="modal-description">{product.name}. El ticket usa los datos guardados del producto y su precio por kg, litro o unidad.</p>
     {preview ? <PdfPreview url={preview.url} filename={preview.filename} title="Previsualización del ticket de oferta">
       <button className="button primary" type="button" onClick={() => setPreview(null)}>Editar oferta</button>
-    </PdfPreview> : <form onSubmit={(event) => void generate(event)}>
-      {error && <p className="form-error" role="alert">{error}</p>}
+    </PdfPreview> : <form aria-describedby={error ? "offerticketmodal-error" : undefined} onSubmit={(event) => void generate(event)}>
       <label>Texto de la promoción
         <textarea autoFocus required maxLength={500} rows={3} value={promoText}
           disabled={isGenerating} onChange={(event) => setPromoText(event.target.value)}
@@ -67,9 +69,10 @@ export function OfferTicketModal({ product, onClose }: { product: Product; onClo
         <input type="number" required min={1} max={1000} step={1} value={copies}
           disabled={isGenerating} onChange={(event) => setCopies(event.target.value)} />
       </label>
+      {error && <p id="offerticketmodal-error" className="form-error" role="alert">{error}</p>}
       <div className="modal-actions">
-        <button className="button secondary" type="button" disabled={isGenerating} onClick={onClose}>Volver al producto</button>
-        <button className="button primary" type="submit" disabled={isGenerating}>{isGenerating ? "Generando…" : "Generar PDF"}</button>
+        <button className="button secondary" type="button" aria-busy={isGenerating} disabled={isGenerating} onClick={onClose}>Volver al producto</button>
+        <button className="button primary" type="submit" aria-busy={isGenerating} disabled={isGenerating}>{isGenerating ? "Generando…" : "Generar PDF"}</button>
       </div>
     </form>}
   </Modal>;

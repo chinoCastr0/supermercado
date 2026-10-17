@@ -2,6 +2,7 @@
  * Vista previa y descarga del PDF; la confirmación es una acción independiente.
  * El padre es dueño de la URL blob y debe revocarla cuando termine su uso.
  */
+import { Icon } from "./Icon";
 import type { GeneratedLabels } from "../types/product";
 import { Modal } from "./Modal";
 import { PdfPreview } from "./PdfPreview";
@@ -38,7 +39,7 @@ export function LabelPreviewModal({
           <h2 id="label-preview-title">Carteles de precios</h2>
         </div>
         <button type="button" onClick={onClose} aria-label="Cerrar">
-          ×
+          <Icon name="close" />
         </button>
       </div>
       <p className="modal-description">
@@ -69,7 +70,7 @@ export function LabelPreviewModal({
       >
         <button
           className="button primary"
-          disabled={isSaving}
+          aria-busy={isSaving} disabled={isSaving}
           type="button"
           onClick={onConfirm}
         >

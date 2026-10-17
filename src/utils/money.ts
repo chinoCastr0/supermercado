@@ -76,11 +76,36 @@ export function normalizeMoneyInput(rawValue: string): string | null {
 
 /** Agrupa miles y centavos por texto, sin perder precisión. */
 export function formatMoney(value: string): string {
-  const normalized = normalizeMoneyInput(value);
+  // Los totales calculados admiten cero y pueden superar el límite de un precio.
+  const normalized = /^\d+\.\d{2}$/.test(value) ? value : normalizeMoneyInput(value);
   if (!normalized) return "Precio inválido";
   const [integer, cents] = normalized.split(".");
   const grouped = integer.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
   return `$ ${grouped},${cents}`;
+}
+
+/** Operaciones sobre importes canónicos no negativos, sin límite de total. */
+export function moneyCents(value: string): bigint {
+  if (!/^\d+\.\d{2}$/.test(value)) throw new Error("Importe no canónico");
+  return BigInt(value.replace(".", ""));
+}
+
+export function moneyFromCents(cents: bigint): string {
+  if (cents < 0n) throw new Error("Importe negativo");
+  return `${cents / 100n}.${String(cents % 100n).padStart(2, "0")}`;
+}
+
+export function multiplyMoney(value: string, quantity: number): string {
+  if (!Number.isSafeInteger(quantity) || quantity < 1) throw new Error("Cantidad inválida");
+  return moneyFromCents(moneyCents(value) * BigInt(quantity));
+}
+
+export function sumMoney(values: readonly string[]): string {
+  return moneyFromCents(values.reduce((total, value) => total + moneyCents(value), 0n));
+}
+
+export function subtractMoney(left: string, right: string): string {
+  return moneyFromCents(moneyCents(left) - moneyCents(right));
 }
 
 /** Compara centavos BigInt; ante texto inválido usa orden lexicográfico. */

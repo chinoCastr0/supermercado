@@ -4,9 +4,15 @@
   PATRÓN: Application Shell; entrega la estructura HTML mínima y delega la UI.
   SOLUCIÓN ESPECÍFICA: metadatos, favicon, título y elemento `root` del inventario.
 -->
-<html lang="es">
+<html lang="es-AR">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      try {
+        const theme = localStorage.getItem("supermercado-theme");
+        if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+      } catch { /* El tema del sistema funciona sin almacenamiento local. */ }
+    </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />

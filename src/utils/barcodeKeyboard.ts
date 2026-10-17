@@ -1,5 +1,6 @@
 /** Los lectores USB/Bluetooth escriben una ráfaga de teclas y terminan con Enter. */
-export function createBarcodeKeyboardReader(onBarcode: (barcode: string) => void) {
+export function createBarcodeKeyboardReader(onBarcode: (barcode: string) => void,
+  options: { maxInterval?: number; allowTextSearch?: boolean } = {}) {
   let buffer = "";
   let lastKeyTime = -Infinity;
 
@@ -8,14 +9,14 @@ export function createBarcodeKeyboardReader(onBarcode: (barcode: string) => void
       buffer = "";
       return;
     }
-    const isContinuous = event.timeStamp - lastKeyTime <= 100;
+    const isContinuous = event.timeStamp - lastKeyTime <= (options.maxInterval ?? 100);
     if (event.key === "Enter") {
       // El campo de búsqueda también admite códigos numéricos ingresados lentamente.
       const isScan = isContinuous && buffer.length >= 3;
       const barcode = isScan ? buffer : searchValue?.trim();
       buffer = "";
       lastKeyTime = -Infinity;
-      if (barcode && (isScan || (searchValue !== undefined && /^\d+$/.test(barcode)))) {
+      if (barcode && (isScan || (searchValue !== undefined && (options.allowTextSearch || /^\d+$/.test(barcode))))) {
         event.preventDefault();
         onBarcode(barcode);
       }

@@ -5,6 +5,10 @@
  * Los botones se ocultan según los permisos de Clerk de la organización activa;
  * el backend vuelve a exigirlos y un 403 se muestra en NoticeBanner.
  */
+import { Skeleton } from "./components/Skeleton";
+import { useAuth } from "@clerk/react";
+import { CashRegisterView } from "./components/CashRegisterView";
+import { Icon } from "./components/Icon";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 import type { ScannerLookupOutcome } from "./components/BarcodeScanner";
@@ -49,6 +53,7 @@ const BarcodeScanner = lazy(() =>
 
 /** Coordina el inventario visible y las acciones de sus componentes. */
 function App() {
+  const { userId, orgId } = useAuth();
   const inventory = useProducts();
   const can = usePermissions();
   const loadProducts = inventory.load;
@@ -318,6 +323,7 @@ function App() {
         if (view === "productos") void inventory.load();
       }}
     >
+      {view === "caja" && can.canReadProducts && userId && orgId && <CashRegisterView key={`${userId}:${orgId}`} storageKey={`cash-register:v1:${userId}:${orgId}`} />}
       {view === "faltantes" && <MissingProductsView canManage={can.canManageMissing} />}
       {view === "equipo" && can.isAdmin && <TeamView />}
       {view === "productos" && (
@@ -333,13 +339,13 @@ function App() {
               type="button"
               onClick={() => setModal("scanner")}
             >
-              ▣ <span>Escanear</span>
+              <Icon name="scan" /> <span>Escanear</span>
             </button>
             {can.canExportRegister && (
               <button
                 className="button secondary"
                 type="button"
-                disabled={inventory.isExporting}
+                aria-busy={inventory.isExporting} disabled={inventory.isExporting}
                 onClick={() => void inventory.exportRegister()}
               >
                 {inventory.isExporting ? "Generando…" : "Exportar caja"}
@@ -352,14 +358,14 @@ function App() {
                   type="button"
                   onClick={() => setModal("import")}
                 >
-                  ⇧ <span>Importar</span>
+                  <Icon name="upload" /> <span>Importar</span>
                 </button>
                 <button
                   className="button primary"
                   type="button"
                   onClick={createProduct}
                 >
-                  ＋ <span>Nuevo producto</span>
+                  <Icon name="plus" /> <span>Nuevo producto</span>
                 </button>
               </>
             )}
@@ -371,7 +377,8 @@ function App() {
             onClose={() => inventory.setNotice(null)}
           />
         )}
-        <StatsCards products={inventory.products} />
+        {inventory.isLoading ? <Skeleton label="Cargando indicadores" rows={1} /> : <StatsCards products={inventory.products} />}
+        <p className="keyboard-hint" id="barcode-search-hint">Lector USB/Bluetooth disponible. En la búsqueda, ingresá un código y presioná <kbd>Enter</kbd>.</p>
         <section className="data-card" aria-labelledby="table-title">
           <div className="print-toolbar">
             <div>
@@ -387,7 +394,7 @@ function App() {
                     <button
                       className="button secondary"
                       type="button"
-                      disabled={inventory.isSaving}
+                      aria-busy={inventory.isSaving} disabled={inventory.isSaving}
                       onClick={openBulkPrice}
                     >
                       Cambiar precio
@@ -397,7 +404,7 @@ function App() {
                     <button
                       className="button danger"
                       type="button"
-                      disabled={inventory.isSaving}
+                      aria-busy={inventory.isSaving} disabled={inventory.isSaving}
                       onClick={() => void deleteSelected()}
                     >
                       Eliminar seleccionados
@@ -406,7 +413,7 @@ function App() {
                   <button
                     className="button secondary"
                     type="button"
-                    disabled={inventory.isSaving}
+                    aria-busy={inventory.isSaving} disabled={inventory.isSaving}
                     onClick={() => setSelectedIds(new Set())}
                   >
                     Limpiar selección
@@ -426,7 +433,7 @@ function App() {
                   <button
                     className="button secondary"
                     type="button"
-                    disabled={!selectedProductIds.length || inventory.isSaving}
+                    aria-busy={inventory.isSaving} disabled={!selectedProductIds.length || inventory.isSaving}
                     onClick={() => void markSelection(false)}
                   >
                     Volver a pendientes
@@ -434,7 +441,7 @@ function App() {
                   <button
                     className="button secondary"
                     type="button"
-                    disabled={!selectedProductIds.length || inventory.isSaving}
+                    aria-busy={inventory.isSaving} disabled={!selectedProductIds.length || inventory.isSaving}
                     onClick={() => void markSelection(true)}
                   >
                     Marcar impresos
@@ -442,7 +449,7 @@ function App() {
                   <button
                     className="button primary"
                     type="button"
-                    disabled={
+                    aria-busy={inventory.isGeneratingLabels} disabled={
                       inventory.isGeneratingLabels ||
                       (!selectedProductIds.length && !pendingFiltered.length)
                     }
@@ -537,14 +544,12 @@ function App() {
               className="barcode-scanner-modal"
             >
               <div className="modal-header scanner-header">
-                <h2 id="barcode-scanner-loading-title">Cargando lector…</h2>
+                <h2 id="barcode-scanner-loading-title">Escanear código</h2>
                 <button type="button" onClick={closeModal} aria-label="Cerrar">
-                  ×
-                </button>
+          <Icon name="close" />
+        </button>
               </div>
-              <div className="scanner-feedback" role="status">
-                <strong>Preparando el lector…</strong>
-              </div>
+              <Skeleton label="Preparando el lector" rows={3} />
             </Modal>
           }
         >

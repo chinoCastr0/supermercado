@@ -4,6 +4,7 @@
  * para anotar. La vinculación con un producto del catálogo es opcional y solo
  * sirve como referencia; nunca copia precio, código de barras ni otros campos.
  */
+import { Icon } from "./Icon";
 import { useEffect, useRef, useState } from "react";
 import { productsApi } from "../api/products";
 import { useMissingProducts } from "../hooks/useMissingProducts";
@@ -139,7 +140,7 @@ function MissingProductsContent() {
             type="button"
             onClick={() => void missing.load()}
           >
-            ↻ <span>Actualizar</span>
+            <Icon name="refresh" /> <span>Actualizar</span>
           </button>
         </div>
       </div>
@@ -184,8 +185,8 @@ function MissingProductsContent() {
             <p className="missing-link-chip">
               Vinculado a producto #{draft.productId}
               <button type="button" onClick={clearLink} aria-label="Quitar vínculo">
-                ×
-              </button>
+          <Icon name="close" />
+        </button>
             </p>
           )}
         </div>
@@ -219,9 +220,9 @@ function MissingProductsContent() {
         <button
           className="button primary"
           type="submit"
-          disabled={missing.isSaving || draft.name.trim() === ""}
+          aria-busy={missing.isSaving} disabled={missing.isSaving || draft.name.trim() === ""}
         >
-          ＋ <span>Agregar</span>
+          <Icon name="plus" /> <span>Agregar</span>
         </button>
       </form>
 
@@ -236,11 +237,12 @@ function MissingProductsContent() {
           </div>
           <div className="filters">
             <label className="search">
-              <span>⌕</span>
+              <span><Icon name="search" /></span>
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Buscar por nombre..."
+                id="missing-search"
                 aria-label="Buscar faltantes"
               />
             </label>

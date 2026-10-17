@@ -3,6 +3,8 @@
  * En móvil las filas se reordenan como tarjetas mediante los `data-label`,
  * igual que la tabla de productos. No consulta la API: notifica por callbacks.
  */
+import { Skeleton } from "./Skeleton";
+import { Icon } from "./Icon";
 import { useState } from "react";
 import type {
   MissingProduct,
@@ -38,23 +40,20 @@ export function MissingProductsTable({
 }: Props) {
   if (isLoading)
     return (
-      <div className="state-panel">
-        <span className="loader" />
-        <h3>Cargando faltantes</h3>
-        <p>Estamos consultando la base de datos.</p>
-      </div>
+      <Skeleton label="Cargando faltantes" />
     );
 
   if (!items.length)
     return (
       <div className="state-panel">
-        <div className="empty-icon">⌕</div>
+        <div className="empty-icon"><Icon name="search" /></div>
         <h3>No hay faltantes para mostrar</h3>
         <p>
           {hasAny
             ? "Probá cambiando la búsqueda o el filtro de estado."
             : "Anotá el primer producto que falta reponer desde el formulario de arriba."}
         </p>
+        <a className="button secondary" href={hasAny ? "#missing-search" : "#missing-name"}>{hasAny ? "Revisar búsqueda" : "Anotar faltante"}</a>
       </div>
     );
 
@@ -64,7 +63,7 @@ export function MissingProductsTable({
         <thead>
           <tr>
             <th>Producto</th>
-            <th>Cantidad</th>
+            <th className="numeric">Cantidad</th>
             <th>Nota</th>
             <th>Fecha</th>
             <th>Estado</th>
@@ -129,14 +128,14 @@ export function MissingProductsTable({
                 <td className="row-actions">
                   <button
                     type="button"
-                    disabled={isSaving}
+                    aria-busy={isSaving} disabled={isSaving}
                     onClick={() => onToggleStatus(item)}
                   >
                     {item.status === "resolved" ? "Reabrir" : "Resolver"}
                   </button>
                   <button
                     type="button"
-                    disabled={isSaving}
+                    aria-busy={isSaving} disabled={isSaving}
                     onClick={() => onEditStart(item)}
                     aria-label={`Editar ${item.name}`}
                   >
@@ -145,11 +144,11 @@ export function MissingProductsTable({
                   <button
                     className="delete"
                     type="button"
-                    disabled={isSaving}
+                    aria-busy={isSaving} disabled={isSaving}
                     onClick={() => onDelete(item)}
                     aria-label={`Eliminar ${item.name}`}
                   >
-                    ×
+                    <Icon name="trash" />
                   </button>
                 </td>
               </tr>
@@ -224,12 +223,12 @@ function MissingEditRow({ item, isSaving, onCancel, onSave }: EditRowProps) {
       <td className="row-actions">
         <button
           type="button"
-          disabled={isSaving || name.trim() === ""}
+          aria-busy={isSaving} disabled={isSaving || name.trim() === ""}
           onClick={save}
         >
           Guardar
         </button>
-        <button type="button" disabled={isSaving} onClick={onCancel}>
+        <button type="button" aria-busy={isSaving} disabled={isSaving} onClick={onCancel}>
           Cancelar
         </button>
       </td>

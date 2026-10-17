@@ -3,6 +3,7 @@
  * La vista previa retiene las revisiones recibidas al abrir el modal; no debe
  * actualizarlas silenciosamente antes de confirmar una escritura.
  */
+import { Icon } from "./Icon";
 import { useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import type { BulkProductRevision, Product } from "../types/product";
@@ -91,12 +92,12 @@ export function BulkPriceModal({
           onClick={closeWithoutChanges}
           aria-label="Cerrar sin modificar productos"
         >
-          ×
+          <Icon name="close" />
         </button>
       </div>
 
       {step === "entry" ? (
-        <form onSubmit={continueToConfirmation}>
+        <form aria-describedby={validationError ? "bulkpricemodal-error" : undefined} onSubmit={continueToConfirmation}>
           <p className="modal-description">
             El precio absoluto se aplicará a {products.length} producto
             {products.length === 1 ? "" : "s"}. Todavía no se realizará ningún
@@ -116,7 +117,7 @@ export function BulkPriceModal({
             />
           </label>
           {validationError && (
-            <p className="form-error" role="alert">
+            <p id="bulkpricemodal-error" className="form-error" role="alert">
               {validationError}
             </p>
           )}
@@ -152,7 +153,7 @@ export function BulkPriceModal({
                 </div>
                 <div className="bulk-price-change">
                   <span>{formatMoney(product.currentPrice)}</span>
-                  <b aria-hidden="true">→</b>
+                  <b aria-hidden="true"><Icon name="arrow" /></b>
                   <span>{formatMoney(product.newPrice)}</span>
                   {!product.changes && <em>Sin cambios</em>}
                 </div>
@@ -160,7 +161,7 @@ export function BulkPriceModal({
             ))}
           </div>
           {error && (
-            <p className="form-error" role="alert">
+            <p id="bulkpricemodal-error" className="form-error" role="alert">
               {error}
             </p>
           )}
@@ -168,7 +169,7 @@ export function BulkPriceModal({
             <button
               className="button secondary"
               type="button"
-              disabled={isSaving}
+              aria-busy={isSaving} disabled={isSaving}
               onClick={() => {
                 const transition = bulkPriceTransition("confirmation", "back");
                 if (transition.step === "entry") setStep("entry");
@@ -179,7 +180,7 @@ export function BulkPriceModal({
             <button
               className="button secondary"
               type="button"
-              disabled={isSaving}
+              aria-busy={isSaving} disabled={isSaving}
               onClick={closeWithoutChanges}
             >
               Cancelar
@@ -187,7 +188,7 @@ export function BulkPriceModal({
             <button
               className="button primary"
               type="button"
-              disabled={isSaving}
+              aria-busy={isSaving} disabled={isSaving}
               onClick={() => void confirmChanges()}
             >
               {isSaving ? "Aplicando…" : "Confirmar cambios"}

@@ -5,6 +5,9 @@
  * El cambio rige en el backend de inmediato; la interfaz del empleado se
  * actualiza cuando recarga la app.
  */
+import { Icon } from "./Icon";
+import { OrganizationSwitcher } from "@clerk/react";
+import { Skeleton } from "./Skeleton";
 import { useEffect, useState } from "react";
 import { membersApi } from "../api/members";
 import type { AssignableRole, Member } from "../types/member";
@@ -85,12 +88,16 @@ export function TeamView() {
           </div>
         </div>
         {isLoading ? (
+          <Skeleton label="Cargando equipo" />
+        ) : !members.length ? (
           <div className="state-panel">
-            <span className="loader" />
-            <h3>Cargando equipo</h3>
+            <div className="empty-icon"><Icon name="users" /></div>
+            <h3>No hay miembros para mostrar</h3>
+            <p>Administrá tu equipo desde el selector de organización.</p>
+            <OrganizationSwitcher hidePersonal />
           </div>
         ) : (
-          <div className="table-wrap">
+          <div className="table-wrap team-table">
             <table>
               <thead>
                 <tr>

@@ -1,6 +1,7 @@
 /**
  * Mensaje de resultado con cierre delegado al padre; no ejecuta operaciones.
  */
+import { Icon } from "./Icon";
 import type { Notice } from "../types/product";
 
 /** Renderiza el resultado de una operación con cierre accesible. */
@@ -13,11 +14,11 @@ export function NoticeBanner({
 }) {
   return (
     <div className={`notice ${notice.kind}`} role="status">
-      <span>{notice.kind === "success" ? "✓" : "!"}</span>
+      <Icon name={notice.kind === "success" ? "check" : "alert"} />
       <p>{notice.message}</p>
       <button type="button" aria-label="Cerrar mensaje" onClick={onClose}>
-        ×
-      </button>
+          <Icon name="close" />
+        </button>
     </div>
   );
 }

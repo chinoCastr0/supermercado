@@ -4,6 +4,8 @@
  * mantenerse sincronizado con PAGE_SIZE de App.
  * Un callback ausente oculta su acción: el padre los omite según los permisos.
  */
+import { Skeleton } from "./Skeleton";
+import { Icon } from "./Icon";
 import type { Product } from "../types/product";
 import { formatDate } from "../utils/formatters";
 import { formatMoney } from "../utils/money";
@@ -50,16 +52,12 @@ export function ProductsTable({
 
   if (isLoading)
     return (
-      <div className="state-panel">
-        <span className="loader" />
-        <h3>Cargando inventario</h3>
-        <p>Estamos consultando la base de datos.</p>
-      </div>
+      <Skeleton label="Cargando inventario" />
     );
   if (!products.length)
     return (
       <div className="state-panel">
-        <div className="empty-icon">⌕</div>
+        <div className="empty-icon"><Icon name="search" /></div>
         <h3>No encontramos productos</h3>
         <p>
           {hasAnyProducts
@@ -68,9 +66,10 @@ export function ProductsTable({
               ? "Agregá tu primer producto o importá una planilla."
               : "Todavía no hay productos cargados en esta organización."}
         </p>
+        {hasAnyProducts && <a className="button secondary" href="#product-search">Revisar búsqueda</a>}
         {!hasAnyProducts && onCreate && (
           <button className="button primary" type="button" onClick={onCreate}>
-            ＋ Nuevo producto
+            <Icon name="plus" /> Nuevo producto
           </button>
         )}
       </div>
@@ -94,10 +93,10 @@ export function ProductsTable({
               </th>
               <th>Producto</th>
               <th>Código de barras</th>
-              <th>Precio</th>
+              <th className="numeric">Precio</th>
               <th>Última actualización</th>
-              <th>Peso</th>
-              <th>IMPRESO</th>
+              <th className="numeric">Peso</th>
+              <th>Cartel</th>
               <th>
                 <span className="sr-only">Acciones</span>
               </th>
@@ -182,7 +181,7 @@ export function ProductsTable({
                       onClick={() => onDelete(product)}
                       aria-label={`Eliminar ${product.name}`}
                     >
-                      ×
+                      <Icon name="trash" />
                     </button>
                   )}
                 </td>
@@ -205,7 +204,7 @@ export function ProductsTable({
             disabled={page === 1}
             onClick={() => onPageChange(page - 1)}
           >
-            ← Anterior
+            <Icon name="left" /> Anterior
           </button>
           <span>
             Página {page} de {totalPages}
@@ -215,7 +214,7 @@ export function ProductsTable({
             disabled={page === totalPages}
             onClick={() => onPageChange(page + 1)}
           >
-            Siguiente →
+            Siguiente <Icon name="arrow" />
           </button>
         </div>
       </footer>

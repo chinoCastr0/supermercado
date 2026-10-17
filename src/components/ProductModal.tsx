@@ -5,6 +5,7 @@
  * `access` deshabilita los campos que el rol no puede cambiar (precio aparte
  * del resto); el backend vuelve a validar cada permiso.
  */
+import { Icon } from "./Icon";
 import { useState } from "react";
 import type { FormEvent } from "react";
 import type {
@@ -120,20 +121,15 @@ export function ProductModal({
           </h2>
         </div>
         <button type="button" onClick={onClose} aria-label="Cerrar">
-          ×
+          <Icon name="close" />
         </button>
       </div>
-      <form onSubmit={(event) => void submit(event)}>
+      <form aria-describedby={validationError ? "productmodal-error" : undefined} onSubmit={(event) => void submit(event)}>
         {product && access.canSubmit && (!access.canEditDetails || !access.canEditPrice) && (
           <p className="field-hint" role="note">
             {access.canEditPrice
               ? "Tu rol sólo permite cambiar el precio."
               : "Tu rol no permite cambiar el precio."}
-          </p>
-        )}
-        {validationError && (
-          <p className="form-error" role="alert">
-            {validationError}
           </p>
         )}
         <label>
@@ -244,14 +240,19 @@ export function ProductModal({
           />
           <small className="field-hint">Podés ajustarlo manualmente antes de guardar.</small>
         </label>
+        {validationError && (
+          <p id="productmodal-error" className="form-error" role="alert">
+            {validationError}
+          </p>
+        )}
         <div className="modal-actions">
-          {product && access.canCreateOffer && <button className="button secondary" type="button" disabled={isSaving}
+          {product && access.canCreateOffer && <button className="button secondary" type="button" aria-busy={isSaving} disabled={isSaving}
             onClick={() => setIsOfferOpen(true)}>Crear oferta</button>}
           <button className="button secondary" type="button" onClick={onClose}>
             {access.canSubmit ? "Cancelar" : "Cerrar"}
           </button>
           {access.canSubmit && (
-            <button className="button primary" disabled={isSaving} type="submit">
+            <button className="button primary" aria-busy={isSaving} disabled={isSaving} type="submit">
               {isSaving
                 ? "Guardando…"
                 : product
